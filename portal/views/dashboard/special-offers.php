@@ -570,12 +570,20 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                     </div>
                   </td>
                   <?php
-                    $qtyMode = (string) ($override['qty_mode'] ?? 'unlimited');
+                    $qtyMode = trim((string) ($override['qty_mode'] ?? ''));
                     if (!in_array($qtyMode, ['unlimited', 'stock', 'fixed'], true)) {
-                        $qtyMode = 'unlimited';
+                        // Prefer fixed when a package cap was stored (stagnant creates).
+                        $qtyMode = isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])
+                            ? 'fixed'
+                            : 'unlimited';
                     }
                     $qtyCap = $override['qty_cap_packages'] ?? '';
                     $isExhausted = !empty($override['is_exhausted']);
+                    $mpMeta = $manualProductsByGuid[$guid] ?? [];
+                    if ($qtyMode === 'fixed' && ($qtyCap === '' || $qtyCap === null)
+                        && isset($mpMeta['availablePackages']) && is_numeric((string) $mpMeta['availablePackages'])) {
+                        $qtyCap = $mpMeta['availablePackages'];
+                    }
                   ?>
                   <td class="so-invoice__qty">
                     <div class="so-invoice__qty-fields">

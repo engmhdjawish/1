@@ -107,6 +107,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         $perMaterialPercents[$guid] = (float) $pct;
     }
+    $rawPackages = is_array($_POST['material_qty_packages'] ?? null) ? $_POST['material_qty_packages'] : [];
+    $perMaterialPackages = [];
+    foreach ($rawPackages as $guid => $qty) {
+        $guid = strtolower(trim((string) $guid));
+        if ($guid === '' || !is_numeric($qty)) {
+            continue;
+        }
+        $perMaterialPackages[$guid] = (float) $qty;
+    }
     try {
         $result = StagnantInventoryService::createOfferFromSelection(
             $selectedGuids,
@@ -114,7 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $discountPercent,
             $titleAr,
             $userId,
-            $asDraft
+            $asDraft,
+            $perMaterialPackages
         );
     } catch (\Throwable $e) {
         $result = [

@@ -312,8 +312,8 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
     <input type="hidden" name="group_guids[]" value="<?= h($guid) ?>">
   <?php endforeach; ?>
 
-  <div class="sticky top-2 z-10 mb-4 rounded-xl border border-border-subtle bg-white/95 backdrop-blur p-3 shadow-sm space-y-3" data-stagnant-tray>
-    <div class="flex flex-wrap items-end gap-3">
+  <div class="sticky top-2 z-10 mb-3 rounded-xl border border-border-subtle bg-white/95 backdrop-blur px-3 py-2.5 shadow-sm space-y-2" data-stagnant-tray>
+    <div class="flex flex-wrap items-end gap-2.5">
       <label class="text-sm">
         <span class="text-text-muted">عنوان العرض</span>
         <input type="text" name="offer_title" value="عرض تصريف راكد <?= h(date('Y-m-d')) ?>" class="mt-1 block w-56 h-10 rounded-xl border border-border-subtle px-3 text-sm">
@@ -334,12 +334,12 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
     </div>
     <div>
-      <div class="flex items-center justify-between gap-2 mb-2">
+      <div class="flex items-center justify-between gap-2 mb-1.5">
         <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
-        <p class="text-xs text-text-muted">الجدول ثابت — المرشّحون يُضافون في نهاية هذه القائمة فقط</p>
+        <p class="text-xs text-text-muted">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
       </div>
-      <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[4.5rem] max-h-56 overflow-y-auto" data-stagnant-tray-list>
-        <p class="text-xs text-text-muted px-3 py-4 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
+      <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[2.75rem] max-h-40 overflow-y-auto" data-stagnant-tray-list>
+        <p class="text-xs text-text-muted px-3 py-3 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
       </div>
     </div>
   </div>

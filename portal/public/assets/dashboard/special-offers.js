@@ -133,16 +133,42 @@
       perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
         const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
         if (!guid) return;
-        const type = row.querySelector('[data-field="discount_type"]')?.value || 'percent';
+        const prev = overridesState[guid] && typeof overridesState[guid] === 'object'
+          ? overridesState[guid]
+          : {};
+        const type = row.querySelector('[data-field="discount_type"]')?.value || prev.discount_type || 'percent';
+        const qtyModeEl = row.querySelector('[data-field="qty_mode"]');
+        const qtyCapEl = row.querySelector('[data-field="qty_cap_packages"]');
+        const qtyModeFromDom = qtyModeEl instanceof HTMLSelectElement || qtyModeEl instanceof HTMLInputElement
+          ? String(qtyModeEl.value || '').trim()
+          : '';
+        const qtyCapFromDom = qtyCapEl instanceof HTMLInputElement ? String(qtyCapEl.value ?? '') : null;
+        // Never silently fall back to unlimited — that wiped stagnant fixed caps on rebuild.
+        let qtyMode = qtyModeFromDom
+          || String(prev.qty_mode || '').trim()
+          || 'fixed';
+        if (!['unlimited', 'stock', 'fixed'].includes(qtyMode)) {
+          qtyMode = 'fixed';
+        }
+        let qtyCap = qtyCapFromDom !== null ? qtyCapFromDom : String(prev.qty_cap_packages ?? '');
+        if (qtyMode === 'fixed' && (qtyCap === '' || qtyCap == null)) {
+          const meta = labelMap[guid] || {};
+          if (meta.availablePackages != null && meta.availablePackages !== '') {
+            qtyCap = String(meta.availablePackages);
+          } else if (prev.qty_cap_packages != null && prev.qty_cap_packages !== '') {
+            qtyCap = String(prev.qty_cap_packages);
+          }
+        }
         overridesState[guid] = {
           discount_type: type,
-          discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || '',
-          fixed_price_syp: row.querySelector('[data-field="fixed_price_syp"]')?.value || '',
-          fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || '',
-          fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || '',
-          fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || '',
-          qty_mode: row.querySelector('[data-field="qty_mode"]')?.value || 'unlimited',
-          qty_cap_packages: row.querySelector('[data-field="qty_cap_packages"]')?.value || '',
+          discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || prev.discount_percent || '',
+          fixed_price_syp: row.querySelector('[data-field="fixed_price_syp"]')?.value || prev.fixed_price_syp || '',
+          fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || prev.fixed_price_usd || '',
+          fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || prev.fixed_amount_syp || '',
+          fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || prev.fixed_amount_usd || '',
+          qty_mode: qtyMode,
+          qty_cap_packages: qtyCap,
+          is_exhausted: !!(prev.is_exhausted || row.querySelector('.so-invoice__exhausted')),
         };
       });
     };

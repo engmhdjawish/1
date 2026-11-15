@@ -653,7 +653,14 @@ final class SpecialOfferService
             );
             $materialGuids = is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : [];
             $productOverrides = is_array($payload['product_overrides'] ?? null) ? $payload['product_overrides'] : [];
-            self::syncManualProducts($id, $materialGuids, $pricingScope === 'per_material' ? $productOverrides : []);
+            // Always sync manual product rows with overrides (discount + qty caps).
+            // Previously overrides were dropped when pricing_scope was forced to "offer"
+            // (missing extended columns), which left qty_mode at DB default "unlimited".
+            self::syncManualProducts(
+                $id,
+                $materialGuids,
+                $selectionMode === 'manual' ? $productOverrides : []
+            );
             self::syncOfferNotification($id);
         } catch (\Throwable $e) {
             return [
@@ -1767,12 +1774,33 @@ final class SpecialOfferService
         $insert(self::OPTION_PRICE_MODE, $priceMode);
     }
 
+    /**
+     * @param array<string, mixed> $override
+     * @return array{0: string, 1: float|null}
+     */
+    private static function normalizeQtyOverride(array $override): array
+    {
+        $mode = trim((string) ($override['qty_mode'] ?? ''));
+        if (!in_array($mode, ['unlimited', 'stock', 'fixed'], true)) {
+            // Prefer fixed when a package cap is present (stagnant tray / invoice defaults).
+            $mode = isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])
+                ? 'fixed'
+                : 'unlimited';
+        }
+        $cap = $mode === 'fixed'
+            ? self::toNullableFloat((string) ($override['qty_cap_packages'] ?? ''))
+            : null;
+
+        return [$mode, $cap];
+    }
+
     /** @param list<string> $guids @param array<string, array<string, mixed>> $overrides */
     private static function syncManualProducts(string $offerId, array $guids, array $overrides = []): void
     {
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM special_offer_products WHERE offer_id = :id')->execute(['id' => $offerId]);
         $hasExtended = self::hasExtendedOfferPricingColumns();
+        $hasQty = self::hasProductQtyColumns();
         $normalizedOverrides = [];
         foreach ($overrides as $key => $value) {
             $normalizedOverrides[strtolower(trim((string) $key))] = is_array($value) ? $value : [];
@@ -1817,6 +1845,11 @@ final class SpecialOfferService
                     ? self::toNullableFloat((string) ($override['fixed_amount_usd'] ?? ''))
                     : null;
             }
+            if ($hasQty) {
+                [$qtyMode, $qtyCap] = self::normalizeQtyOverride($override);
+                $row[] = $qtyMode;
+                $row[] = $qtyCap;
+            }
             $rows[] = $row;
         }
 
@@ -1825,12 +1858,29 @@ final class SpecialOfferService
         }
 
         // Multi-row inserts cut round-trips when saving large stagnant-offer drafts.
+        // Qty columns are written in the same INSERT so caps cannot be left at DB default.
         $chunkSize = 80;
         foreach (array_chunk($rows, $chunkSize) as $chunk) {
             $placeholders = [];
             $params = [];
             foreach ($chunk as $index => $row) {
-                if ($hasExtended) {
+                if ($hasExtended && $hasQty) {
+                    $placeholders[] = '(:o' . $index . ', :g' . $index . ', :s' . $index
+                        . ', :dt' . $index . ', :dp' . $index . ', :fps' . $index . ', :fpu' . $index
+                        . ', :fas' . $index . ', :fau' . $index
+                        . ', :qm' . $index . ', :qc' . $index . ')';
+                    $params['o' . $index] = $row[0];
+                    $params['g' . $index] = $row[1];
+                    $params['s' . $index] = $row[2];
+                    $params['dt' . $index] = $row[3];
+                    $params['dp' . $index] = $row[4];
+                    $params['fps' . $index] = $row[5];
+                    $params['fpu' . $index] = $row[6];
+                    $params['fas' . $index] = $row[7];
+                    $params['fau' . $index] = $row[8];
+                    $params['qm' . $index] = $row[9];
+                    $params['qc' . $index] = $row[10];
+                } elseif ($hasExtended) {
                     $placeholders[] = '(:o' . $index . ', :g' . $index . ', :s' . $index
                         . ', :dt' . $index . ', :dp' . $index . ', :fps' . $index . ', :fpu' . $index
                         . ', :fas' . $index . ', :fau' . $index . ')';
@@ -1843,6 +1893,19 @@ final class SpecialOfferService
                     $params['fpu' . $index] = $row[6];
                     $params['fas' . $index] = $row[7];
                     $params['fau' . $index] = $row[8];
+                } elseif ($hasQty) {
+                    $placeholders[] = '(:o' . $index . ', :g' . $index . ', :s' . $index
+                        . ', :dt' . $index . ', :dp' . $index . ', :fps' . $index . ', :fpu' . $index
+                        . ', :qm' . $index . ', :qc' . $index . ')';
+                    $params['o' . $index] = $row[0];
+                    $params['g' . $index] = $row[1];
+                    $params['s' . $index] = $row[2];
+                    $params['dt' . $index] = $row[3];
+                    $params['dp' . $index] = $row[4];
+                    $params['fps' . $index] = $row[5];
+                    $params['fpu' . $index] = $row[6];
+                    $params['qm' . $index] = $row[7];
+                    $params['qc' . $index] = $row[8];
                 } else {
                     $placeholders[] = '(:o' . $index . ', :g' . $index . ', :s' . $index
                         . ', :dt' . $index . ', :dp' . $index . ', :fps' . $index . ', :fpu' . $index . ')';
@@ -1856,11 +1919,24 @@ final class SpecialOfferService
                 }
             }
 
-            if ($hasExtended) {
+            if ($hasExtended && $hasQty) {
+                $sql = 'INSERT INTO special_offer_products (
+                    offer_id, material_guid, sort_order,
+                    discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                    fixed_amount_syp, fixed_amount_usd,
+                    qty_mode, qty_cap_packages
+                 ) VALUES ' . implode(', ', $placeholders);
+            } elseif ($hasExtended) {
                 $sql = 'INSERT INTO special_offer_products (
                     offer_id, material_guid, sort_order,
                     discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
                     fixed_amount_syp, fixed_amount_usd
+                 ) VALUES ' . implode(', ', $placeholders);
+            } elseif ($hasQty) {
+                $sql = 'INSERT INTO special_offer_products (
+                    offer_id, material_guid, sort_order,
+                    discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                    qty_mode, qty_cap_packages
                  ) VALUES ' . implode(', ', $placeholders);
             } else {
                 $sql = 'INSERT INTO special_offer_products (
@@ -1871,35 +1947,7 @@ final class SpecialOfferService
             $pdo->prepare($sql)->execute($params);
         }
 
-        if (self::hasProductQtyColumns()) {
-            $qtyStmt = $pdo->prepare(
-                'UPDATE special_offer_products
-                 SET qty_mode = :qty_mode,
-                     qty_cap_packages = :qty_cap,
-                     is_exhausted = FALSE,
-                     exhausted_at = NULL
-                 WHERE offer_id = :offer_id AND lower(material_guid::text) = :guid'
-            );
-            foreach (self::stringList($guids) as $guid) {
-                $guid = strtolower(trim($guid));
-                if ($guid === '') {
-                    continue;
-                }
-                $override = $normalizedOverrides[$guid] ?? [];
-                $mode = trim((string) ($override['qty_mode'] ?? 'unlimited'));
-                if (!in_array($mode, ['unlimited', 'stock', 'fixed'], true)) {
-                    $mode = 'unlimited';
-                }
-                $cap = $mode === 'fixed'
-                    ? self::toNullableFloat((string) ($override['qty_cap_packages'] ?? ''))
-                    : null;
-                $qtyStmt->execute([
-                    'qty_mode' => $mode,
-                    'qty_cap' => $cap,
-                    'offer_id' => $offerId,
-                    'guid' => $guid,
-                ]);
-            }
+        if ($hasQty) {
             self::refreshExhaustedFlags($offerId);
         }
     }

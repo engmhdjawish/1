@@ -120,6 +120,7 @@ final class StagnantInventoryService
      *
      * @param list<string> $materialGuids
      * @param array<string, float|int|string> $perMaterialPercents guid => percent
+     * @param array<string, float|int|string> $perMaterialPackages guid => packages (كمية column snapshot)
      * @return array{ok: bool, message: string, id?: string|null}
      */
     public static function createOfferFromSelection(
@@ -128,7 +129,8 @@ final class StagnantInventoryService
         float $defaultPercent,
         string $titleAr,
         ?string $userId,
-        bool $asDraft = true
+        bool $asDraft = true,
+        array $perMaterialPackages = []
     ): array {
         $guids = [];
         foreach ($materialGuids as $guid) {
@@ -147,17 +149,35 @@ final class StagnantInventoryService
             $title = 'عرض تصريف راكد ' . date('Y-m-d');
         }
 
-        // Snapshot current warehouse packages as a fixed cap (كمية ثابتة = الرصيد الحالي).
-        $materialsByGuid = [];
-        try {
-            $fetched = MaterialBatchService::fetchByGuids($guids, 45);
-            foreach ($fetched as $key => $payload) {
-                if (is_array($payload)) {
-                    $materialsByGuid[strtolower(trim((string) $key))] = $payload;
-                }
+        // Prefer packages posted from the stagnant «كمية» column; fall back to API warehouse/packaging.
+        $postedPackages = [];
+        foreach ($perMaterialPackages as $key => $rawQty) {
+            $key = strtolower(trim((string) $key));
+            if ($key === '' || !is_numeric($rawQty)) {
+                continue;
             }
-        } catch (\Throwable) {
-            $materialsByGuid = [];
+            $postedPackages[$key] = max(0.0, round((float) $rawQty, 4));
+        }
+
+        $materialsByGuid = [];
+        $needsApi = false;
+        foreach ($guids as $guid) {
+            if (!array_key_exists($guid, $postedPackages)) {
+                $needsApi = true;
+                break;
+            }
+        }
+        if ($needsApi) {
+            try {
+                $fetched = MaterialBatchService::fetchByGuids($guids, 45);
+                foreach ($fetched as $key => $payload) {
+                    if (is_array($payload)) {
+                        $materialsByGuid[strtolower(trim((string) $key))] = $payload;
+                    }
+                }
+            } catch (\Throwable) {
+                $materialsByGuid = [];
+            }
         }
 
         $overrides = [];
@@ -167,10 +187,13 @@ final class StagnantInventoryService
                 ?? $defaultPercent;
             $pct = is_numeric($raw) ? (float) $raw : $defaultPercent;
             $pct = max(0.01, min(95.0, $pct));
-            $material = $materialsByGuid[strtolower($guid)] ?? null;
-            $packages = is_array($material)
-                ? self::packagesFromMaterial($material)
-                : null;
+            $packages = $postedPackages[$guid] ?? null;
+            if ($packages === null) {
+                $material = $materialsByGuid[strtolower($guid)] ?? null;
+                $packages = is_array($material)
+                    ? self::packagesFromMaterial($material)
+                    : null;
+            }
             $overrides[$guid] = [
                 'discount_type' => 'percent',
                 'discount_percent' => $pct,

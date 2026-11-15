@@ -2907,36 +2907,14 @@ button.is-loading[data-loading-label],
   background: #fef2f2;
 }
 
+/* Candidates are removed from the materials table (row.hidden); keep rules as safety net. */
+.stagnant-card[data-stagnant-in-tray="1"],
 .stagnant-card.is-in-tray {
-  background: #f0fdf4;
-  box-shadow: inset 3px 0 0 #059669;
-}
-
-.stagnant-card.is-in-tray:hover {
-  background: #ecfdf5;
-}
-
-.stagnant-tray-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 1.25rem;
-  padding: 0 0.45rem;
-  border-radius: 9999px;
-  background: #059669;
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  line-height: 1;
+  display: none !important;
 }
 
 .stagnant-tray-badge[hidden] {
   display: none !important;
-}
-
-[data-stagnant-add].is-added {
-  background: #047857 !important;
-  cursor: default;
 }
 
 .stagnant-offer-chip {

@@ -4,7 +4,7 @@
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
-  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null}>} */
+  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, packages:number|null}>} */
   const candidates = new Map();
   /** Insertion order for tray rows — always append new candidates at the end. */
   /** @type {string[]} */
@@ -55,24 +55,28 @@
     return !!(modal && !modal.hidden && modal.classList.contains('is-open'));
   }
 
-  function allRows() {
-    return Array.from(document.querySelectorAll('[data-stagnant-card]'));
+  /** Visible materials only (candidates are hidden from the table). */
+  function allRows(includeHidden = false) {
+    return Array.from(document.querySelectorAll('[data-stagnant-card]'))
+      .filter((row) => includeHidden || !(row instanceof HTMLElement && row.hidden));
   }
 
   function markRowInTray(row, inTray) {
     if (!(row instanceof HTMLElement)) return;
+    // Priority: remove from materials table while it lives in the candidates tray.
+    row.hidden = !!inTray;
     row.classList.toggle('is-in-tray', inTray);
     if (inTray) row.setAttribute('data-stagnant-in-tray', '1');
     else row.removeAttribute('data-stagnant-in-tray');
     const addBtn = row.querySelector('[data-stagnant-add]');
     if (addBtn instanceof HTMLButtonElement) {
-      addBtn.textContent = inTray ? 'مُضافة' : 'إضافة';
-      addBtn.disabled = inTray;
-      addBtn.classList.toggle('is-added', inTray);
+      addBtn.textContent = 'إضافة';
+      addBtn.disabled = false;
+      addBtn.classList.remove('is-added');
     }
     const badge = row.querySelector('[data-stagnant-tray-badge]');
     if (badge instanceof HTMLElement) {
-      badge.hidden = !inTray;
+      badge.hidden = true;
     }
   }
 
@@ -281,12 +285,21 @@
     return { percent, priceUsd };
   }
 
+  function rowPackages(row) {
+    const raw = parseLoose(row.getAttribute('data-qty'));
+    if (raw === null || raw < 0) return null;
+    return Math.round(raw * 10000) / 10000;
+  }
+
   function addCandidateFromRow(row) {
     if (!(row instanceof HTMLElement)) return false;
     const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
     if (!guid) return false;
+    if (candidates.has(guid)) {
+      markRowInTray(row, true);
+      return false;
+    }
     const pricing = readRowPricing(row);
-    const isNew = !candidates.has(guid);
     candidates.set(guid, {
       guid,
       name: row.getAttribute('data-name') || guid,
@@ -297,16 +310,11 @@
       rate: rowRate(row),
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
+      packages: rowPackages(row),
     });
-    if (isNew) {
-      candidateOrder.push(guid);
-    }
+    candidateOrder.push(guid);
     markRowInTray(row, true);
-    if (isNew) {
-      appendTrayItem(candidates.get(guid), true);
-    } else {
-      updateTrayItemPricing(candidates.get(guid));
-    }
+    appendTrayItem(candidates.get(guid), true);
     syncSubmitState();
     syncPreviewPricingFromRow();
     updateNavControls();
@@ -486,13 +494,21 @@
     guidHidden.name = 'material_guids[]';
     guidHidden.value = item.guid;
 
+    // Snapshot of «كمية» packages so create_offer can persist qty_mode=fixed.
+    const qtyHidden = document.createElement('input');
+    qtyHidden.type = 'hidden';
+    qtyHidden.name = 'material_qty_packages[' + item.guid + ']';
+    qtyHidden.value = item.packages !== null && item.packages !== undefined
+      ? String(item.packages)
+      : '';
+
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
     removeBtn.textContent = 'إزالة';
     removeBtn.addEventListener('click', () => removeCandidate(item.guid));
 
-    row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
+    row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, qtyHidden, removeBtn);
     list.appendChild(row);
     if (scrollIntoView) {
       row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -582,8 +598,8 @@
   function updateNavControls() {
     const modal = previewModal();
     if (!modal) return;
-    const rows = allRows();
-    const index = activeRow ? rows.indexOf(activeRow) : -1;
+    const rows = allRows(false);
+    const index = activeRow && !activeRow.hidden ? rows.indexOf(activeRow) : -1;
     const prevBtn = modal.querySelector('[data-stagnant-preview-prev]');
     const nextBtn = modal.querySelector('[data-stagnant-preview-next]');
     const pos = modal.querySelector('[data-stagnant-preview-position]');
@@ -654,7 +670,7 @@
   }
 
   function stepPreview(delta) {
-    const rows = allRows();
+    const rows = allRows(false);
     if (rows.length === 0) {
       closePreview();
       return;
@@ -663,6 +679,7 @@
     if (index < 0) index = delta > 0 ? -1 : 0;
     const next = rows[index + delta];
     if (next) openPreview(next);
+    else if (activeRow?.hidden && rows.length > 0) openPreview(rows[0]);
   }
 
   function bindPreview(form) {
@@ -692,11 +709,9 @@
     modal.querySelector('[data-stagnant-preview-add]')?.addEventListener('click', () => {
       if (!activeRow) return;
       const current = activeRow;
-      const rows = allRows();
-      const index = rows.indexOf(current);
       addCandidateFromRow(current);
-      const next = index >= 0 ? rows[index + 1] : null;
-      if (next) openPreview(next);
+      const remaining = allRows(false);
+      if (remaining.length > 0) openPreview(remaining[0]);
       else closePreview();
     });
 
@@ -825,7 +840,7 @@
     });
 
     document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
-      allRows().forEach((row) => {
+      allRows(false).forEach((row) => {
         const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
         if (!guid || candidates.has(guid)) return;
         addCandidateFromRow(row);
