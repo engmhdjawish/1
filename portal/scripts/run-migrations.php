@@ -17,11 +17,35 @@ require $base . '/bootstrap.php';
 use Portal\Config;
 use Portal\Database;
 
-$docs = Config::get('PORTAL_REPO_DOCS_PATH', $base . '/../docs') ?? ($base . '/../docs');
-if (!preg_match('/^[A-Za-z]:[\/\\\\]/', $docs) && !str_starts_with($docs, '/') && !str_starts_with($docs, '\\\\')) {
-    $docs = $base . '/' . ltrim($docs, '/\\');
+$configuredDocs = Config::get('PORTAL_REPO_DOCS_PATH', '') ?? '';
+// Prefer docs bundled into the publish tree (publish.sh syncs them), then configured
+// PORTAL_REPO_DOCS_PATH, then repo-relative ../docs for local checkouts.
+$docsCandidates = [
+    $base . '/docs',
+];
+if (is_string($configuredDocs) && trim($configuredDocs) !== '') {
+    $docsCandidates[] = trim($configuredDocs);
 }
-$docs = realpath($docs) ?: $docs;
+$docsCandidates[] = $base . '/../docs';
+
+$docs = null;
+foreach ($docsCandidates as $candidate) {
+    if (!preg_match('/^[A-Za-z]:[\/\\\\]/', $candidate) && !str_starts_with($candidate, '/') && !str_starts_with($candidate, '\\\\')) {
+        $candidate = $base . '/' . ltrim($candidate, '/\\');
+    }
+    $resolved = realpath($candidate) ?: $candidate;
+    if (is_dir($resolved . '/portal-migrations')) {
+        $docs = $resolved;
+        break;
+    }
+}
+if ($docs === null) {
+    $fallback = $docsCandidates[0] ?? ($base . '/../docs');
+    if (!preg_match('/^[A-Za-z]:[\/\\\\]/', $fallback) && !str_starts_with($fallback, '/') && !str_starts_with($fallback, '\\\\')) {
+        $fallback = $base . '/' . ltrim($fallback, '/\\');
+    }
+    $docs = realpath($fallback) ?: $fallback;
+}
 
 $migrationDir = $docs . '/portal-migrations';
 $standalone = [
@@ -61,14 +85,37 @@ $ordered = [
     '026-unavailable-prices.sql',
     '027-share-link-short-codes.sql',
     '028-catalog-filter-views.sql',
+    '029-short-link-targets.sql',
     '030-store-staff-images-view.sql',
+    '031-offer-qty-caps-and-analytics.sql',
 ];
 
 $files = [];
+$seen = [];
 foreach ($ordered as $name) {
     $path = $migrationDir . '/' . $name;
     if (is_file($path)) {
         $files[] = $path;
+        $seen[$name] = true;
+    }
+}
+// Safety net: numbered SQL files on disk but missing from $ordered still get applied
+// (sorted) so a forgotten registry line cannot silently skip a migration like 031.
+if (is_dir($migrationDir)) {
+    $extras = [];
+    foreach (scandir($migrationDir) ?: [] as $name) {
+        if (!is_string($name) || !preg_match('/^\d{3}-.+\.sql$/', $name) || isset($seen[$name])) {
+            continue;
+        }
+        $path = $migrationDir . '/' . $name;
+        if (is_file($path)) {
+            $extras[] = $path;
+        }
+    }
+    sort($extras, SORT_STRING);
+    foreach ($extras as $path) {
+        $files[] = $path;
+        fwrite(STDERR, 'تحذير: ترحيل غير مسجّل في القائمة سيُطبَّق: ' . basename($path) . "\n");
     }
 }
 foreach ($standalone as $path) {

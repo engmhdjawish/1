@@ -148,10 +148,49 @@
     updateNavControls();
   }
 
-  function resetSavingUi(form) {
+  function stashOriginalSubmitLabels(form) {
     if (!(form instanceof HTMLFormElement)) return;
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (!btn.getAttribute('data-stagnant-original-html')) {
+        btn.setAttribute('data-stagnant-original-html', btn.innerHTML || '');
+      }
+    });
+  }
+
+  function resetSavingUi(form) {
     savingOffer = false;
-    setSavingState(form, false, null);
+    if (!(form instanceof HTMLFormElement)) {
+      form = document.getElementById('stagnant-offer-form');
+    }
+    if (!(form instanceof HTMLFormElement)) return;
+
+    form.classList.remove('is-saving');
+    form.setAttribute('aria-busy', 'false');
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      const original = btn.getAttribute('data-stagnant-original-html')
+        || btn.dataset.stagnantLabel
+        || '';
+      if (original) {
+        btn.innerHTML = original;
+      }
+      delete btn.dataset.stagnantLabel;
+      delete btn.dataset.dashboardPrevLabel;
+      delete btn.dataset.dashboardLoadingLabelApplied;
+      btn.classList.remove('is-loading');
+      btn.removeAttribute('aria-busy');
+    });
+    form.querySelectorAll('[data-stagnant-add], [data-stagnant-add-visible], [data-stagnant-clear-tray]').forEach((el) => {
+      if (el instanceof HTMLButtonElement) el.disabled = false;
+    });
+    const hint = form.querySelector('[data-stagnant-saving-hint]')
+      || document.querySelector('[data-stagnant-saving-hint]');
+    if (hint instanceof HTMLElement) {
+      hint.classList.add('hidden');
+      hint.textContent = '';
+    }
+    syncSubmitState(document);
   }
 
   function roundUpTo5(amount) {
@@ -312,30 +351,27 @@
 
   function setSavingState(form, saving, submitter) {
     savingOffer = saving;
-    form.classList.toggle('is-saving', saving);
-    form.setAttribute('aria-busy', saving ? 'true' : 'false');
+    if (!saving) {
+      resetSavingUi(form);
+      return;
+    }
+    stashOriginalSubmitLabels(form);
+    form.classList.add('is-saving');
+    form.setAttribute('aria-busy', 'true');
     form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
       if (!(btn instanceof HTMLButtonElement)) return;
-      if (saving) {
-        if (!btn.dataset.stagnantLabel) {
-          btn.dataset.stagnantLabel = btn.innerHTML || '';
-        }
-        const label = btn.getAttribute('data-loading-label') || 'جاري الحفظ…';
-        if (btn === submitter || !submitter) {
-          btn.textContent = label;
-        }
-        btn.disabled = true;
-        btn.classList.add('is-loading');
-      } else {
-        if (btn.dataset.stagnantLabel) {
-          btn.innerHTML = btn.dataset.stagnantLabel;
-          delete btn.dataset.stagnantLabel;
-        }
-        btn.classList.remove('is-loading');
+      if (!btn.dataset.stagnantLabel) {
+        btn.dataset.stagnantLabel = btn.getAttribute('data-stagnant-original-html') || btn.innerHTML || '';
       }
+      const label = btn.getAttribute('data-loading-label') || 'جاري الحفظ…';
+      if (btn === submitter || !submitter) {
+        btn.textContent = label;
+      }
+      btn.disabled = true;
+      btn.classList.add('is-loading');
     });
     form.querySelectorAll('[data-stagnant-add], [data-stagnant-add-visible], [data-stagnant-clear-tray]').forEach((el) => {
-      if (el instanceof HTMLButtonElement) el.disabled = saving;
+      if (el instanceof HTMLButtonElement) el.disabled = true;
     });
     syncSubmitState(document);
   }
@@ -1042,6 +1078,7 @@
         hideRowsForTrayCandidates(root);
         renderTray();
       }
+      stashOriginalSubmitLabels(form);
       resetSavingUi(form);
       syncSubmitState(root);
       syncTraySectionChrome();
@@ -1049,6 +1086,7 @@
     }
     form.setAttribute(BOUND, '1');
     hydrateTrayForCurrentDom(root);
+    stashOriginalSubmitLabels(form);
     resetSavingUi(form);
 
     form.addEventListener('click', (event) => {
@@ -1168,12 +1206,18 @@
   document.addEventListener('dashboard:ajax-done', (event) => {
     const detail = event.detail || {};
     const form = detail.form;
-    if (!(form instanceof HTMLFormElement) || form.id !== 'stagnant-offer-form') {
-      return;
-    }
     const active = document.getElementById('stagnant-offer-form');
-    if (active instanceof HTMLFormElement) {
-      resetSavingUi(active);
+    const isStagnantForm = form instanceof HTMLFormElement && (
+      form.id === 'stagnant-offer-form'
+      || form.hasAttribute('data-stagnant-offer-form')
+    );
+    // Always clear stuck «جاري الحفظ…» after any AJAX finish while this form was saving,
+    // including ok:false / thrown fetchJson errors (HTTP 400).
+    if (isStagnantForm || savingOffer || (active && active.classList.contains('is-saving'))) {
+      resetSavingUi(active || form);
+    }
+    if (!isStagnantForm) {
+      return;
     }
     if (detail.ok && detail.redirect) {
       markOfferSavedForLaterVisit();

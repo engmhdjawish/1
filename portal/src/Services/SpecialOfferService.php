@@ -1438,9 +1438,12 @@ final class SpecialOfferService
     }
 
     /** Whether migration 031 qty columns exist. */
-    private static function hasProductQtyColumns(): bool
+    private static function hasProductQtyColumns(bool $refresh = false): bool
     {
         static $cached = null;
+        if ($refresh) {
+            $cached = null;
+        }
         if ($cached !== null) {
             return $cached;
         }
@@ -1452,6 +1455,43 @@ final class SpecialOfferService
         }
 
         return $cached;
+    }
+
+    /**
+     * Best-effort apply of migration 031 column adds (IF NOT EXISTS) when the
+     * runner never registered 031. Safe to call repeatedly.
+     */
+    private static function ensureProductQtyColumns(): bool
+    {
+        if (self::hasProductQtyColumns()) {
+            return true;
+        }
+        try {
+            $pdo = Database::pdo();
+            $pdo->exec(
+                'ALTER TABLE special_offer_products
+                    ADD COLUMN IF NOT EXISTS qty_mode VARCHAR(20) NOT NULL DEFAULT \'unlimited\',
+                    ADD COLUMN IF NOT EXISTS qty_cap_packages NUMERIC(18, 4),
+                    ADD COLUMN IF NOT EXISTS is_exhausted BOOLEAN NOT NULL DEFAULT FALSE,
+                    ADD COLUMN IF NOT EXISTS exhausted_at TIMESTAMPTZ'
+            );
+            $pdo->exec(
+                'DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = \'chk_special_offer_products_qty_mode\'
+                    ) THEN
+                        ALTER TABLE special_offer_products
+                            ADD CONSTRAINT chk_special_offer_products_qty_mode
+                            CHECK (qty_mode IN (\'unlimited\', \'stock\', \'fixed\'));
+                    END IF;
+                END $$'
+            );
+        } catch (\Throwable) {
+            return self::hasProductQtyColumns(true);
+        }
+
+        return self::hasProductQtyColumns(true);
     }
 
     /** @param array<string, mixed> $rules */
@@ -1800,7 +1840,7 @@ final class SpecialOfferService
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM special_offer_products WHERE offer_id = :id')->execute(['id' => $offerId]);
         $hasExtended = self::hasExtendedOfferPricingColumns();
-        $hasQty = self::hasProductQtyColumns();
+        $hasQty = self::ensureProductQtyColumns();
         $normalizedOverrides = [];
         foreach ($overrides as $key => $value) {
             $normalizedOverrides[strtolower(trim((string) $key))] = is_array($value) ? $value : [];
@@ -1813,7 +1853,7 @@ final class SpecialOfferService
                     && is_numeric((string) $override['qty_cap_packages']);
                 if ($mode !== '' || $hasCap) {
                     throw new \RuntimeException(
-                        'أعمدة كمية العرض غير موجودة. شغّل الترحيل docs/portal-migrations/031-offer-qty-caps-and-analytics.sql'
+                        'أعمدة كمية العرض غير موجودة. من مجلد المستودع شغّل: PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh'
                     );
                 }
             }

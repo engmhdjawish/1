@@ -25,7 +25,11 @@ if [[ "${PORTAL_DB_SETUP:-migrate}" == "fresh" ]]; then
   php scripts/run-migrations.php
 elif [[ "${PORTAL_DB_SETUP:-migrate}" == "migrate" ]]; then
   step "ترحيل قاعدة البيانات"
+  if [[ ! -f docs/portal-migrations/031-offer-qty-caps-and-analytics.sql ]]; then
+    warn "ملف 031 غير موجود تحت docs/ — تأكد أن publish نسخ docs من المستودع"
+  fi
   php scripts/run-migrations.php
+  ok "ترحيل 031 (qty_mode / qty_cap_packages) يُطبَّق تلقائياً عند وجوده في docs/portal-migrations/"
 else
   warn "تخطي إعداد DB — عيّن PORTAL_DB_SETUP=fresh أو migrate"
 fi
