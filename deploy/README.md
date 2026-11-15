@@ -3,6 +3,8 @@
 > **نشر الإنتاج المعتاد (Linux على `/opt/jawish`):** راجع  
 > **[JAWISH-PRODUCTION-WORKFLOW.md](./JAWISH-PRODUCTION-WORKFLOW.md)** — `git pull` + `deploy/portal/publish.sh` + `php8.5-fpm` + nginx.
 
+> **تطبيق أندرويد على Google Play (TWA):** **[PLAYSTORE-ANDROID.md](./PLAYSTORE-ANDROID.md)** + مشروع **[../android-twa](../android-twa)**.
+
 هذا المجلد يحتوي معالج نشر تفاعلي وسكريبتات لتجهيز **ExistingDb.Api** (.NET 9) و**البوابة** (PHP + PostgreSQL) للإنتاج.
 
 ## البنية

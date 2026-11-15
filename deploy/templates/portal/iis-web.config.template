@@ -4,6 +4,10 @@
   <system.webServer>
     <rewrite>
       <rules>
+        <rule name="Android Asset Links" stopProcessing="true">
+          <match url="^\.well-known/assetlinks\.json$" />
+          <action type="Rewrite" url=".well-known/assetlinks.php" />
+        </rule>
         <rule name="Force HTTPS" stopProcessing="true">
           <match url="(.*)" />
           <conditions>

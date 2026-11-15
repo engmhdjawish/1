@@ -1,0 +1,68 @@
+{
+  "packageId": "sy.jawishco.portal",
+  "host": "www.jawishco.sy",
+  "name": "جاويش للتجارة",
+  "launcherName": "جاويش",
+  "display": "standalone",
+  "themeColor": "#D81921",
+  "themeColorDark": "#000000",
+  "navigationColor": "#D81921",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#f6f6f9",
+  "enableNotifications": true,
+  "startUrl": "/?source=playstore",
+  "iconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=512&v=2-1792789140&webapk=7",
+  "maskableIconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=512&maskable=1&v=2-1792789141&webapk=7",
+  "monochromeIconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=512&v=2-1792789140&webapk=7",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "portal"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "المتجر",
+      "shortName": "المتجر",
+      "url": "https://www.jawishco.sy/store.php?source=playstore",
+      "chosenIconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=192&v=2-1792789773&webapk=7"
+    },
+    {
+      "name": "السلة",
+      "shortName": "السلة",
+      "url": "https://www.jawishco.sy/store-cart.php?source=playstore",
+      "chosenIconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=192&v=2-1792789773&webapk=7"
+    },
+    {
+      "name": "طلباتي",
+      "shortName": "طلباتي",
+      "url": "https://www.jawishco.sy/my-orders.php?source=playstore",
+      "chosenIconUrl": "https://www.jawishco.sy/icons/brand-icon.php?size=192&v=2-1792789773&webapk=7"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://www.jawishco.sy/manifest.php",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": false
+    },
+    "locationDelegation": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 23,
+  "orientation": "portrait-primary",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

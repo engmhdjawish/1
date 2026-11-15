@@ -1,0 +1,2 @@
+# Copy to local.properties (not committed). Used by Gradle on your build machine.
+sdk.dir=/home/YOUR_USER/.bubblewrap/android_sdk

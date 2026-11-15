@@ -1,0 +1,16 @@
+# Local SDK path (see local.properties.example)
+/local.properties
+
+# Signing — never commit
+android.keystore
+*.jks
+*.keystore
+
+# Gradle / Android Studio
+.gradle/
+build/
+app/build/
+.idea/
+*.iml
+captures/
+.DS_Store

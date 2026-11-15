@@ -91,6 +91,15 @@ server {
         try_files $uri =404;
     }
 
+    # Digital Asset Links (Play Store TWA) — must not hit "location ~ /\." deny below
+    location = /.well-known/assetlinks.json {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root/.well-known/assetlinks.php;
+        fastcgi_param SCRIPT_NAME /.well-known/assetlinks.php;
+        include fastcgi_params;
+    }
+
     location ~ /\. {
         deny all;
     }
@@ -161,6 +170,14 @@ server {
 #         add_header Cache-Control "public, immutable";
 #         access_log off;
 #         try_files $uri =404;
+#     }
+#
+#     location = /.well-known/assetlinks.json {
+#         include fastcgi_params;
+#         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+#         fastcgi_param SCRIPT_FILENAME $document_root/.well-known/assetlinks.php;
+#         fastcgi_param SCRIPT_NAME /.well-known/assetlinks.php;
+#         include fastcgi_params;
 #     }
 #
 #     location ~ /\. { deny all; }
