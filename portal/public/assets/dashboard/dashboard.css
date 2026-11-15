@@ -2633,7 +2633,8 @@ button.is-loading[data-loading-label],
   gap: 0.65rem;
 }
 
-.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__list-wrap {
+/* Keep toolbar + candidates header/toggle visible; only the list body collapses. */
+.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__list {
   display: none;
 }
 
@@ -2642,6 +2643,13 @@ button.is-loading[data-loading-label],
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.stagnant-candidates-section__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 

@@ -318,6 +318,10 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
   <?php if ($items === []): ?>
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm font-bold text-slate-700">مواد المخزون الراكد</p>
+      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
+    </div>
     <div class="rounded-xl border border-border-subtle bg-white overflow-x-auto shadow-sm">
       <table class="w-full min-w-[1240px] text-sm border-collapse">
         <thead>
@@ -524,8 +528,6 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
         تفعيل العرض
       </button>
       <span class="text-sm font-bold text-slate-600 hidden" data-stagnant-saving-hint aria-live="polite">جاري الحفظ…</span>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
     </div>
     <div class="stagnant-candidates-section__list-wrap">
       <div class="stagnant-candidates-section__head">
@@ -533,16 +535,19 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
           <p class="text-base font-extrabold text-slate-800">ملخّص المرشّحين</p>
           <p class="text-sm text-text-muted">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
         </div>
-        <button
-          type="button"
-          class="stagnant-candidates-section__toggle"
-          data-stagnant-tray-toggle
-          aria-expanded="true"
-          aria-controls="stagnant-tray-list-region"
-          title="طيّ / توسيع ملخّص المرشّحين"
-        >
-          <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
-        </button>
+        <div class="stagnant-candidates-section__head-actions">
+          <button type="button" class="h-9 px-3 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
+          <button
+            type="button"
+            class="stagnant-candidates-section__toggle"
+            data-stagnant-tray-toggle
+            aria-expanded="true"
+            aria-controls="stagnant-tray-list-region"
+            title="طيّ / توسيع ملخّص المرشّحين"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+          </button>
+        </div>
       </div>
       <div class="stagnant-candidates-section__list" data-stagnant-tray-list id="stagnant-tray-list-region">
         <p class="text-sm text-text-muted px-4 py-8 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>

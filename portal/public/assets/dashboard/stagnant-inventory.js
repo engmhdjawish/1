@@ -5,6 +5,7 @@
 (function () {
   const BOUND = 'data-stagnant-bound';
   const TRAY_SAVED_SESSION_KEY = 'portal.stagnant-offer-saved';
+  const TRAY_CANDIDATES_SESSION_KEY = 'portal.stagnant-offer-candidates';
   /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, packages:number|null}>} */
   const candidates = new Map();
   /** Insertion order for tray rows — always append new candidates at the end. */
@@ -50,6 +51,74 @@
     return false;
   }
 
+  function persistCandidates() {
+    try {
+      const items = [];
+      candidateOrder.forEach((guid) => {
+        const item = candidates.get(guid);
+        if (item) items.push(item);
+      });
+      if (items.length === 0) {
+        sessionStorage.removeItem(TRAY_CANDIDATES_SESSION_KEY);
+        return;
+      }
+      sessionStorage.setItem(TRAY_CANDIDATES_SESSION_KEY, JSON.stringify({
+        order: candidateOrder.slice(),
+        items,
+      }));
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function clearPersistedCandidates() {
+    try {
+      sessionStorage.removeItem(TRAY_CANDIDATES_SESSION_KEY);
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function loadCandidatesFromSession() {
+    try {
+      const raw = sessionStorage.getItem(TRAY_CANDIDATES_SESSION_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.items) || !Array.isArray(data.order)) return false;
+      candidates.clear();
+      candidateOrder.length = 0;
+      data.items.forEach((item) => {
+        if (!item || typeof item !== 'object') return;
+        const guid = String(item.guid || '').toLowerCase();
+        if (!guid) return;
+        candidates.set(guid, {
+          guid,
+          name: String(item.name || guid),
+          code: String(item.code || ''),
+          image: String(item.image || ''),
+          saleUsd: typeof item.saleUsd === 'number' ? item.saleUsd : null,
+          purchaseUsd: typeof item.purchaseUsd === 'number' ? item.purchaseUsd : null,
+          rate: typeof item.rate === 'number' ? item.rate : 0,
+          percent: typeof item.percent === 'number' ? item.percent : 15,
+          priceUsd: typeof item.priceUsd === 'number' ? item.priceUsd : null,
+          packages: typeof item.packages === 'number' ? item.packages : null,
+        });
+      });
+      data.order.forEach((guid) => {
+        const key = String(guid || '').toLowerCase();
+        if (key && candidates.has(key) && !candidateOrder.includes(key)) {
+          candidateOrder.push(key);
+        }
+      });
+      candidates.forEach((_item, guid) => {
+        if (!candidateOrder.includes(guid)) candidateOrder.push(guid);
+      });
+      return candidates.size > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function restoreHiddenMaterialRows(root = document) {
     const scope = root instanceof Document ? root : root.ownerDocument || document;
     scope.querySelectorAll('[data-stagnant-card]').forEach((row) => {
@@ -59,9 +128,20 @@
     });
   }
 
+  /** Re-hide current-page material rows that are still in the candidates tray. */
+  function hideRowsForTrayCandidates(root = document) {
+    const scope = root instanceof Document ? root : root.ownerDocument || document;
+    scope.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+      markRowInTray(row, !!(guid && candidates.has(guid)));
+    });
+  }
+
   function clearAllCandidates(root = document) {
     candidateOrder.length = 0;
     candidates.clear();
+    clearPersistedCandidates();
     restoreHiddenMaterialRows(root);
     renderTray();
     syncSubmitState(root);
@@ -301,6 +381,7 @@
       item.percent = pct;
       item.priceUsd = after;
       updateTrayItemPricing(item);
+      persistCandidates();
     }
   }
 
@@ -335,6 +416,7 @@
       item.percent = pct;
       item.priceUsd = after;
       updateTrayItemPricing(item);
+      persistCandidates();
     }
   }
 
@@ -391,6 +473,7 @@
     candidateOrder.push(guid);
     markRowInTray(row, true);
     appendTrayItem(candidates.get(guid), true);
+    persistCandidates();
     syncSubmitState();
     syncTraySectionChrome();
     syncPreviewPricingFromRow();
@@ -417,6 +500,7 @@
       empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
       list.appendChild(empty);
     }
+    persistCandidates();
     syncSubmitState();
     syncTraySectionChrome();
     if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
@@ -506,6 +590,7 @@
         priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
       }
       syncSourceRow(item);
+      persistCandidates();
     });
     pctInput.addEventListener('blur', () => {
       item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
@@ -515,6 +600,7 @@
         priceInput.value = formatUsd(item.priceUsd);
       }
       syncSourceRow(item);
+      persistCandidates();
     });
     pctLabel.appendChild(pctInput);
 
@@ -542,6 +628,7 @@
       sypEl.classList.toggle('is-below-cost', below);
       priceInput.classList.toggle('is-below-cost', below);
       syncSourceRow(item);
+      persistCandidates();
     });
     priceInput.addEventListener('blur', () => {
       if (!(item.saleUsd > 0)) return;
@@ -550,6 +637,7 @@
       item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
       pctInput.value = formatPct(item.percent);
       syncSourceRow(item);
+      persistCandidates();
     });
     priceLabel.appendChild(priceInput);
 
@@ -842,13 +930,27 @@
     }
   }
 
-  /** Drop stale in-memory tray state when the server just sent a fresh form (SPA navigation). */
-  function resetModuleTrayForFreshDom(root = document) {
-    candidateOrder.length = 0;
-    candidates.clear();
-    restoreHiddenMaterialRows(root);
+  /**
+   * After SPA page/filter navigation or full reload: keep tray Map (or restore from
+   * sessionStorage), re-render list, and re-hide current-page rows still in the tray.
+   * Only clears when the offer was just saved (saved=1 / clear flag).
+   */
+  function hydrateTrayForCurrentDom(root = document) {
+    if (shouldClearTrayOnEntry(root)) {
+      candidateOrder.length = 0;
+      candidates.clear();
+      clearPersistedCandidates();
+      restoreHiddenMaterialRows(root);
+    } else if (candidates.size === 0) {
+      loadCandidatesFromSession();
+    } else {
+      persistCandidates();
+    }
+    hideRowsForTrayCandidates(root);
     renderTray();
     syncSubmitState(root);
+    syncTraySectionChrome();
+    updateNavControls();
   }
 
   function init(root = document) {
@@ -857,6 +959,9 @@
     if (form.getAttribute(BOUND) === '1') {
       if (shouldClearTrayOnEntry(root)) {
         clearAllCandidates(root);
+      } else {
+        hideRowsForTrayCandidates(root);
+        renderTray();
       }
       resetSavingUi(form);
       syncSubmitState(root);
@@ -864,10 +969,7 @@
       return;
     }
     form.setAttribute(BOUND, '1');
-    resetModuleTrayForFreshDom(root);
-    if (shouldClearTrayOnEntry(root)) {
-      clearAllCandidates(root);
-    }
+    hydrateTrayForCurrentDom(root);
     resetSavingUi(form);
 
     form.addEventListener('click', (event) => {
@@ -930,18 +1032,18 @@
       }
     });
 
-    document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
+    form.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
       allRows(false).forEach((row) => {
         const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
         if (!guid || candidates.has(guid)) return;
         addCandidateFromRow(row);
       });
     });
-    document.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
+    form.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
       Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));
     });
 
-    document.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
+    form.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
       const section = traySection();
       if (!(section instanceof HTMLElement)) return;
       const collapsed = section.classList.toggle('is-tray-collapsed');
@@ -952,6 +1054,7 @@
     });
     bindPreview(form);
     applyDefaultDiscount(form);
+    hideRowsForTrayCandidates(form);
     renderTray();
     syncSubmitState(document);
   }
