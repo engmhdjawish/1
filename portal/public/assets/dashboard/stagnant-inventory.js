@@ -511,7 +511,7 @@
     row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, qtyHidden, removeBtn);
     list.appendChild(row);
     if (scrollIntoView) {
-      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      row.scrollIntoView({ block: 'end', behavior: 'smooth' });
     }
   }
 
