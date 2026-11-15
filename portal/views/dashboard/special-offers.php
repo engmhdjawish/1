@@ -579,16 +579,22 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                     </div>
                   </td>
                   <?php
-                    $qtyMode = trim((string) ($override['qty_mode'] ?? ''));
-                    if (!in_array($qtyMode, ['unlimited', 'stock', 'fixed'], true)) {
-                        // Prefer fixed when a package cap was stored (stagnant creates).
-                        $qtyMode = isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])
-                            ? 'fixed'
-                            : 'unlimited';
-                    }
-                    $qtyCap = $override['qty_cap_packages'] ?? '';
-                    $isExhausted = !empty($override['is_exhausted']);
                     $mpMeta = $manualProductsByGuid[$guid] ?? [];
+                    $qtyMode = trim((string) ($override['qty_mode'] ?? ''));
+                    $qtyCap = $override['qty_cap_packages'] ?? '';
+                    if (!in_array($qtyMode, ['unlimited', 'stock', 'fixed'], true)) {
+                        // Prefer fixed when a package cap was stored (stagnant creates)
+                        // or warehouse packages are known for this material.
+                        if (isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])) {
+                            $qtyMode = 'fixed';
+                        } elseif (isset($mpMeta['availablePackages']) && is_numeric((string) $mpMeta['availablePackages'])) {
+                            $qtyMode = 'fixed';
+                            $qtyCap = $mpMeta['availablePackages'];
+                        } else {
+                            $qtyMode = 'unlimited';
+                        }
+                    }
+                    $isExhausted = !empty($override['is_exhausted']);
                     if ($qtyMode === 'fixed' && ($qtyCap === '' || $qtyCap === null)
                         && isset($mpMeta['availablePackages']) && is_numeric((string) $mpMeta['availablePackages'])) {
                         $qtyCap = $mpMeta['availablePackages'];

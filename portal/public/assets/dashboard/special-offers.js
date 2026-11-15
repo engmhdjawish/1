@@ -53,9 +53,52 @@
       const meta = labelMapRaw[key] || {};
       labelMap[lower] = { ...meta, guid: lower };
     });
+    // Fill missing qty defaults from warehouse packages so edit/create never opens as «بلا حد».
+    Object.keys(overridesState).forEach((guid) => {
+      const row = overridesState[guid];
+      if (!row || typeof row !== 'object') return;
+      const mode = String(row.qty_mode || '').trim();
+      const meta = labelMap[guid] || {};
+      if (!['unlimited', 'stock', 'fixed'].includes(mode)) {
+        row.qty_mode = 'fixed';
+        if ((row.qty_cap_packages == null || row.qty_cap_packages === '')
+          && meta.availablePackages != null && meta.availablePackages !== '') {
+          row.qty_cap_packages = meta.availablePackages;
+        }
+      } else if (mode === 'fixed'
+        && (row.qty_cap_packages == null || row.qty_cap_packages === '')
+        && meta.availablePackages != null && meta.availablePackages !== '') {
+        row.qty_cap_packages = meta.availablePackages;
+      }
+    });
     const seedGuids = (readJson('#so-manual-material-guids-json', []) || [])
       .map((g) => String(g).toLowerCase())
       .filter(Boolean);
+    // Ensure every seeded material has a qty override so unified/per_material tables show fixed+cap.
+    seedGuids.forEach((guid) => {
+      const meta = labelMap[guid] || {};
+      if (!overridesState[guid]) {
+        overridesState[guid] = {
+          discount_type: 'percent',
+          discount_percent: '',
+          qty_mode: 'fixed',
+          qty_cap_packages: meta.availablePackages != null ? meta.availablePackages : '',
+        };
+        return;
+      }
+      const row = overridesState[guid];
+      const mode = String(row.qty_mode || '').trim();
+      if (!['unlimited', 'stock', 'fixed'].includes(mode)) {
+        row.qty_mode = 'fixed';
+      }
+      if (row.qty_mode === 'fixed'
+        && (row.qty_cap_packages == null || row.qty_cap_packages === '')
+        && meta.availablePackages != null && meta.availablePackages !== '') {
+        row.qty_cap_packages = meta.availablePackages;
+      }
+    });
+    // GUIDs the user explicitly removed — must not reappear via seed JSON / overrides / MutationObserver sync.
+    const removedGuids = new Set();
 
     const roundUpTo5 = (amount) => {
       if (!(amount > 0)) return 0;
@@ -211,15 +254,35 @@
         .map((input) => String(input.value || '').toLowerCase());
       const fromRows = Array.from(perMaterialRows?.querySelectorAll('[data-override-guid]') || [])
         .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase());
-      return Array.from(new Set(
-        [...fromPicker, ...fromDom, ...fromRows, ...seedGuids, ...Object.keys(overridesState)]
-          .map((g) => String(g || '').toLowerCase())
-          .filter(Boolean)
-      ));
+      // Live sources only for the selected set. seedGuids are applied once when the picker is still empty
+      // (cold edit load) — never merge them on every sync or deleted rows come back after chips→table.
+      const live = [...fromPicker, ...fromDom, ...fromRows, ...Object.keys(overridesState)]
+        .map((g) => String(g || '').toLowerCase())
+        .filter((g) => g && !removedGuids.has(g));
+      const seed = live.length === 0
+        ? seedGuids.filter((g) => g && !removedGuids.has(g))
+        : [];
+      return Array.from(new Set([...live, ...seed]));
+    };
+
+    const removeMaterialGuid = (guid) => {
+      guid = String(guid || '').toLowerCase();
+      if (!guid) return;
+      removedGuids.add(guid);
+      delete overridesState[guid];
+      if (typeof window.portalTokenPickerRemove === 'function') {
+        window.portalTokenPickerRemove('so-manual-materials', guid);
+      }
+      // Drop any leftover hidden inputs the picker registry missed (stale SPA node / casing).
+      scope.querySelectorAll('input[name="manual_material_guids[]"]').forEach((input) => {
+        if (String(input.value || '').toLowerCase() === guid) {
+          input.remove();
+        }
+      });
     };
 
     const ensureSeededSelection = () => {
-      let selected = collectGuidSources();
+      let selected = collectGuidSources().filter((guid) => !removedGuids.has(guid));
       if (selected.length > 0 && typeof window.portalTokenPickerAdd === 'function') {
         const already = new Set(
           (typeof window.portalTokenPickerGetSelected === 'function'
@@ -228,7 +291,7 @@
           ).map((g) => String(g).toLowerCase()).filter(Boolean)
         );
         // Only push missing GUIDs — calling Add with a full rebuild triggers MutationObserver loops.
-        const missing = selected.filter((guid) => !already.has(guid));
+        const missing = selected.filter((guid) => !already.has(guid) && !removedGuids.has(guid));
         if (missing.length > 0) {
           const items = missing.map((guid) => {
             const meta = labelMap[guid] || {};
@@ -243,13 +306,15 @@
           window.portalTokenPickerAdd('so-manual-materials', items);
         }
         const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
-          ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
+          ? window.portalTokenPickerGetSelected('so-manual-materials')
+            .map((g) => String(g).toLowerCase())
+            .filter((g) => g && !removedGuids.has(g))
           : [];
         if (fromPicker.length > 0) {
-          selected = Array.from(new Set(fromPicker.filter(Boolean)));
+          selected = Array.from(new Set(fromPicker));
         }
       }
-      return selected;
+      return selected.filter((guid) => !removedGuids.has(guid));
     };
 
     const renderOverrideRow = (guid, meta, index) => {
@@ -402,6 +467,15 @@
           current.qty_cap_packages = meta.availablePackages;
         }
       }
+      // Persist defaults into overridesState so rebuild/capture cannot fall back to unlimited.
+      overridesState[guid] = {
+        ...(overridesState[guid] || {}),
+        ...current,
+        qty_mode: qtyMode,
+        qty_cap_packages: current.qty_cap_packages != null && current.qty_cap_packages !== ''
+          ? current.qty_cap_packages
+          : (qtyMode === 'fixed' && meta.availablePackages != null ? meta.availablePackages : (current.qty_cap_packages ?? '')),
+      };
       const qtyCell = document.createElement('td');
       qtyCell.className = 'so-invoice__qty';
       const qtyWrap = document.createElement('div');
@@ -436,7 +510,9 @@
       qtyCapInput.setAttribute('data-field', 'qty_cap_packages');
       qtyCapInput.className = 'so-invoice__input';
       qtyCapInput.placeholder = 'مثلاً 20';
-      qtyCapInput.value = current.qty_cap_packages != null ? String(current.qty_cap_packages) : '';
+      qtyCapInput.value = overridesState[guid].qty_cap_packages != null
+        ? String(overridesState[guid].qty_cap_packages)
+        : '';
       qtyCapBox.append(qtyCapCaption, qtyCapInput);
       qtyWrap.appendChild(qtyCapBox);
       if (current.is_exhausted) {
@@ -446,7 +522,7 @@
         qtyWrap.appendChild(exhausted);
       }
       qtySelect.addEventListener('change', () => {
-        const mode = qtySelect.value || 'unlimited';
+        const mode = qtySelect.value || 'fixed';
         qtyCapBox.classList.toggle('hidden', mode !== 'fixed');
         overridesState[guid] = {
           ...(overridesState[guid] || {}),
@@ -457,7 +533,7 @@
       qtyCapInput.addEventListener('input', () => {
         overridesState[guid] = {
           ...(overridesState[guid] || {}),
-          qty_mode: qtySelect.value || 'unlimited',
+          qty_mode: qtySelect.value || 'fixed',
           qty_cap_packages: qtyCapInput.value,
         };
       });
@@ -476,13 +552,13 @@
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'so-invoice__remove';
+      removeBtn.setAttribute('data-so-remove-row', '1');
       removeBtn.textContent = 'حذف';
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         tr.remove();
-        delete overridesState[guid];
-        if (typeof window.portalTokenPickerRemove === 'function') {
-          window.portalTokenPickerRemove('so-manual-materials', guid);
-        }
+        removeMaterialGuid(guid);
         syncPerMaterialRows();
       });
       actionCell.appendChild(removeBtn);
@@ -565,30 +641,56 @@
     };
 
     let syncRowsBusy = false;
+    let initialQtySyncDone = false;
     const syncPerMaterialRows = () => {
       if (!perMaterialRows || !perMaterialPanel || syncRowsBusy) return;
       syncRowsBusy = true;
       try {
-        captureOverrideInputs();
-        let selected = ensureSeededSelection();
+        // First pass: do not capture DOM qty (PHP may still show DB-default «بلا حد»).
+        // Apply overridesState defaults (fixed+cap) and rebuild when qty is stale.
+        if (initialQtySyncDone) {
+          captureOverrideInputs();
+        }
+        initialQtySyncDone = true;
+        // Drop overrides for intentionally removed GUIDs before seeding/rebuild.
+        removedGuids.forEach((guid) => {
+          delete overridesState[guid];
+        });
+        let selected = ensureSeededSelection().filter((guid) => !removedGuids.has(guid));
         const existing = Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
           .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
-          .filter(Boolean);
+          .filter((guid) => guid && !removedGuids.has(guid));
 
-        // Never wipe server-rendered invoice rows if seeding still looks empty.
+        // Never wipe server-rendered invoice rows if seeding still looks empty —
+        // but never resurrect intentionally removed GUIDs.
         if (selected.length === 0 && existing.length > 0) {
           selected = existing.slice();
           ensureSeededSelection();
+          selected = selected.filter((guid) => !removedGuids.has(guid));
         }
 
-        const selectedSet = new Set(selected);
-        const existingSet = new Set(existing);
-        const sameGuids = selected.length === existing.length
-          && selected.every((guid) => existingSet.has(guid))
-          && existing.every((guid) => selectedSet.has(guid));
+        // Remove any leftover DOM rows the user deleted before rebuild/early-return.
+        perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
+          const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+          if (guid && removedGuids.has(guid)) {
+            row.remove();
+          }
+        });
 
-        // Rebuild if GUID set changed OR labelMap gained sale/purchase prices after enrich.
+        const selectedSet = new Set(selected);
+        const existingSet = new Set(
+          Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
+            .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
+            .filter(Boolean)
+        );
+        const sameGuids = selected.length === existingSet.size
+          && selected.every((guid) => existingSet.has(guid))
+          && Array.from(existingSet).every((guid) => selectedSet.has(guid));
+
+        // Rebuild if GUID set changed OR labelMap gained sale/purchase prices after enrich
+        // OR qty mode/cap in overridesState disagrees with the server-rendered selects.
         let pricesStale = false;
+        let qtyStale = false;
         if (sameGuids) {
           perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
             const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
@@ -600,6 +702,21 @@
             if (saleAttr !== saleMeta || purchaseAttr !== purchaseMeta) {
               pricesStale = true;
             }
+            const state = overridesState[guid] || {};
+            const qtyModeEl = row.querySelector('[data-field="qty_mode"]');
+            const qtyCapEl = row.querySelector('[data-field="qty_cap_packages"]');
+            const domMode = qtyModeEl instanceof HTMLSelectElement ? String(qtyModeEl.value || '') : '';
+            const stateMode = String(state.qty_mode || '');
+            if (stateMode && domMode && stateMode !== domMode) {
+              qtyStale = true;
+            }
+            if (stateMode === 'fixed') {
+              const domCap = qtyCapEl instanceof HTMLInputElement ? String(qtyCapEl.value ?? '') : '';
+              const stateCap = state.qty_cap_packages != null ? String(state.qty_cap_packages) : '';
+              if (stateCap !== '' && domCap !== stateCap) {
+                qtyStale = true;
+              }
+            }
           });
         }
 
@@ -609,8 +726,8 @@
           : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
         if (countEl) countEl.textContent = countLabel;
 
-        // Keep server-rendered rows when GUID sets and prices already match.
-        if (sameGuids && !pricesStale) {
+        // Keep server-rendered rows when GUID sets, prices, and qty already match.
+        if (sameGuids && !pricesStale && !qtyStale) {
           bindInvoiceRowBehaviors(perMaterialRows);
           applyInvoiceChrome();
           return;
@@ -630,6 +747,7 @@
         }
         selected.forEach((guid, index) => {
           const key = String(guid).toLowerCase();
+          if (removedGuids.has(key)) return;
           const meta = labelMap[key] || { name: key };
           perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
         });
@@ -647,14 +765,13 @@
         if (!(target instanceof HTMLElement)) return;
         const removeBtn = target.closest('[data-so-remove-row], .so-invoice__remove');
         if (!(removeBtn instanceof HTMLElement)) return;
+        event.preventDefault();
+        event.stopPropagation();
         const row = removeBtn.closest('[data-override-guid]');
         if (!(row instanceof HTMLElement)) return;
         const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
         row.remove();
-        if (guid) delete overridesState[guid];
-        if (guid && typeof window.portalTokenPickerRemove === 'function') {
-          window.portalTokenPickerRemove('so-manual-materials', guid);
-        }
+        if (guid) removeMaterialGuid(guid);
         syncPerMaterialRows();
       });
       rowsRoot.addEventListener('change', (event) => {
@@ -663,6 +780,7 @@
         const field = target.getAttribute('data-field') || '';
         const row = target.closest('[data-override-guid]');
         if (!(row instanceof HTMLElement)) return;
+        const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
         if (field === 'discount_type') {
           const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
           row.querySelectorAll('[data-show-for]').forEach((el) => {
@@ -672,11 +790,19 @@
           return;
         }
         if (field === 'qty_mode') {
-          const mode = target instanceof HTMLSelectElement ? target.value : 'unlimited';
+          const mode = target instanceof HTMLSelectElement ? target.value : 'fixed';
           row.querySelectorAll('[data-show-for-qty]').forEach((el) => {
             const visible = el.getAttribute('data-show-for-qty') === mode;
             el.classList.toggle('hidden', !visible);
           });
+          if (guid) {
+            const capEl = row.querySelector('[data-field="qty_cap_packages"]');
+            overridesState[guid] = {
+              ...(overridesState[guid] || {}),
+              qty_mode: mode,
+              qty_cap_packages: capEl instanceof HTMLInputElement ? capEl.value : '',
+            };
+          }
         }
       });
       rowsRoot.addEventListener('input', (event) => {
@@ -959,6 +1085,7 @@
       if (!item || typeof window.portalTokenPickerAdd !== 'function') return;
       const guid = String(item.value || '').toLowerCase();
       if (!guid) return;
+      removedGuids.delete(guid);
       const normalized = {
         ...item,
         value: guid,
@@ -976,6 +1103,15 @@
           // Default: fixed qty = current warehouse packages (كمية ثابتة = الرصيد الحالي).
           qty_mode: 'fixed',
           qty_cap_packages: packages != null ? String(packages) : '',
+        };
+      } else if (!overridesState[guid].qty_mode) {
+        const packages = packagesFromMeta(meta);
+        overridesState[guid] = {
+          ...overridesState[guid],
+          qty_mode: 'fixed',
+          qty_cap_packages: overridesState[guid].qty_cap_packages != null && overridesState[guid].qty_cap_packages !== ''
+            ? overridesState[guid].qty_cap_packages
+            : (packages != null ? String(packages) : ''),
         };
       }
       const refreshInvoice = () => {

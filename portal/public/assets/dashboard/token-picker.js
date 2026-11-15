@@ -270,7 +270,11 @@
     const state = pickerRegistry.get(pickerId);
     const normalized = normalize(value);
     if (!state || normalized === '') return false;
-    const next = state.selectedValues.filter((item) => item !== normalized);
+    // Case-insensitive so GUID casing from seed JSON vs search-add cannot leave a stale hidden input.
+    const needle = normalized.toLowerCase();
+    const next = state.selectedValues.filter(
+      (item) => normalize(item).toLowerCase() !== needle
+    );
     if (next.length === state.selectedValues.length) return false;
     state.selectedValues = next;
     state.renderSelected?.();

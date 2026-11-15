@@ -1806,6 +1806,19 @@ final class SpecialOfferService
             $normalizedOverrides[strtolower(trim((string) $key))] = is_array($value) ? $value : [];
         }
 
+        if (!$hasQty) {
+            foreach ($normalizedOverrides as $override) {
+                $mode = trim((string) ($override['qty_mode'] ?? ''));
+                $hasCap = isset($override['qty_cap_packages'])
+                    && is_numeric((string) $override['qty_cap_packages']);
+                if ($mode !== '' || $hasCap) {
+                    throw new \RuntimeException(
+                        'أعمدة كمية العرض غير موجودة. شغّل الترحيل docs/portal-migrations/031-offer-qty-caps-and-analytics.sql'
+                    );
+                }
+            }
+        }
+
         $rows = [];
         $sort = 0;
         $allowedTypes = $hasExtended
@@ -1947,7 +1960,31 @@ final class SpecialOfferService
             $pdo->prepare($sql)->execute($params);
         }
 
+        // Belt-and-suspenders: re-assert qty columns after INSERT so a missed bind cannot
+        // leave DB default "unlimited" for stagnant / invoice caps.
         if ($hasQty) {
+            $qtyStmt = $pdo->prepare(
+                'UPDATE special_offer_products
+                 SET qty_mode = :qty_mode,
+                     qty_cap_packages = :qty_cap,
+                     is_exhausted = FALSE,
+                     exhausted_at = NULL
+                 WHERE offer_id = :offer_id AND lower(material_guid::text) = :guid'
+            );
+            foreach (self::stringList($guids) as $guid) {
+                $guid = strtolower(trim($guid));
+                if ($guid === '') {
+                    continue;
+                }
+                $override = $normalizedOverrides[$guid] ?? [];
+                [$qtyMode, $qtyCap] = self::normalizeQtyOverride($override);
+                $qtyStmt->execute([
+                    'qty_mode' => $qtyMode,
+                    'qty_cap' => $qtyCap,
+                    'offer_id' => $offerId,
+                    'guid' => $guid,
+                ]);
+            }
             self::refreshExhaustedFlags($offerId);
         }
     }
@@ -2083,11 +2120,15 @@ final class SpecialOfferService
             }
             $grouped[$offerId]['guids'][] = $guid;
             $type = trim((string) ($row['discount_type'] ?? ''));
-            $override = [
-                'qty_mode' => (string) ($row['qty_mode'] ?? 'unlimited'),
-                'qty_cap_packages' => $row['qty_cap_packages'] ?? null,
-                'is_exhausted' => !empty($row['is_exhausted']),
-            ];
+            // Only expose qty fields when migration 031 columns exist. Inventing
+            // qty_mode=unlimited here forced the edit UI to show «بلا حد» even when
+            // the client/JS would otherwise default stagnant rows to fixed+cap.
+            $override = [];
+            if ($qtyCols !== '') {
+                $override['qty_mode'] = (string) ($row['qty_mode'] ?? 'unlimited');
+                $override['qty_cap_packages'] = $row['qty_cap_packages'] ?? null;
+                $override['is_exhausted'] = !empty($row['is_exhausted']);
+            }
             if ($type !== '') {
                 $override['discount_type'] = $type;
                 $override['discount_percent'] = $row['discount_percent'] ?? null;
