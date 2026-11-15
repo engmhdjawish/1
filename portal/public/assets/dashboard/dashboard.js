@@ -79,10 +79,27 @@
 
   function setButtonLoading(btn, loading) {
     if (!btn) return;
-    btn.disabled = loading;
-    btn.classList.toggle('is-loading', loading);
     if (loading) {
-      btn.dataset.dashboardPrevDisabled = btn.disabled ? '1' : '0';
+      if (btn.dataset.dashboardLoadingLabelApplied !== '1') {
+        btn.dataset.dashboardPrevLabel = btn.textContent || '';
+        const label = btn.getAttribute('data-loading-label');
+        if (label) {
+          btn.textContent = label;
+          btn.dataset.dashboardLoadingLabelApplied = '1';
+        }
+      }
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      btn.setAttribute('aria-busy', 'true');
+    } else {
+      if (btn.dataset.dashboardLoadingLabelApplied === '1' && btn.dataset.dashboardPrevLabel != null) {
+        btn.textContent = btn.dataset.dashboardPrevLabel;
+      }
+      delete btn.dataset.dashboardPrevLabel;
+      delete btn.dataset.dashboardLoadingLabelApplied;
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+      btn.removeAttribute('aria-busy');
     }
   }
 
@@ -279,6 +296,9 @@
     '/assets/store-filters.js': () => typeof window.portalStoreFiltersInit === 'function',
     '/assets/dashboard/material-image-zip-download.js': () => typeof window.portalMaterialZipDownloadInit === 'function',
     '/assets/dashboard/share-links-form.js': () => typeof window.portalShareLinksFormInit === 'function',
+    '/assets/dashboard/special-offers.js': () => typeof window.portalSpecialOffersInit === 'function',
+    '/assets/dashboard/stagnant-inventory.js': () => typeof window.portalStagnantInventoryInit === 'function',
+    '/assets/dashboard/token-picker.js': () => typeof window.portalTokenPickerInit === 'function',
   };
 
   const ASSET_LOAD_TIMEOUT_MS = 12000;
@@ -360,6 +380,31 @@
       script.onerror = () => reject(new Error(src));
       document.body.appendChild(script);
     }), src);
+  }
+
+  /** Fire-and-forget: ensure a layout script is present, then re-bind page controllers. */
+  function ensureScriptPresent(src) {
+    const path = src.split('?')[0];
+    const readyCheck = SCRIPT_READY_CHECKS[path];
+    if (readyCheck && readyCheck()) {
+      return Promise.resolve();
+    }
+    return loadScript(src).then(() => {
+      // Re-bind after late script arrival (e.g. SPA landing on special-offers).
+      if (readyCheck && readyCheck()) {
+        if (path.includes('token-picker') && typeof window.portalTokenPickerInit === 'function') {
+          window.portalTokenPickerInit(document);
+        }
+        if (path.includes('special-offers') && typeof window.portalSpecialOffersInit === 'function') {
+          window.portalSpecialOffersInit(document);
+        }
+        if (path.includes('stagnant-inventory') && typeof window.portalStagnantInventoryInit === 'function') {
+          window.portalStagnantInventoryInit(document);
+        }
+      }
+    }).catch((err) => {
+      console.warn('[dashboard] ensureScriptPresent failed', src, err);
+    });
   }
 
   function assetPathname(href) {
@@ -634,6 +679,12 @@
     const reload = form.hasAttribute('data-dashboard-reload');
     const redirect = form.getAttribute('data-dashboard-redirect');
     setButtonLoading(submitter, true);
+    // Disable sibling submits on the same form while one action runs.
+    const siblingSubmits = Array.from(form.querySelectorAll('[type="submit"]'))
+      .filter((btn) => btn !== submitter);
+    siblingSubmits.forEach((btn) => {
+      btn.disabled = true;
+    });
     try {
       const body = new FormData(form);
       if (submitter && submitter.name) {
@@ -660,6 +711,12 @@
       }
     } finally {
       setButtonLoading(submitter, false);
+      siblingSubmits.forEach((btn) => {
+        if (btn instanceof HTMLButtonElement && !btn.classList.contains('is-loading')) {
+          btn.disabled = false;
+        }
+      });
+      document.dispatchEvent(new CustomEvent('dashboard:ajax-done', { detail: { form } }));
     }
   }
 
@@ -841,6 +898,10 @@
     bindConfirm(root);
     bindFilterForms(root);
     bindClickableRows(root);
+    // Ensure page scripts exist after SPA navigations that land on offer/stagnant editors.
+    void ensureScriptPresent('/assets/dashboard/token-picker.js');
+    void ensureScriptPresent('/assets/dashboard/special-offers.js');
+    void ensureScriptPresent('/assets/dashboard/stagnant-inventory.js');
     if (typeof window.portalTokenPickerInit === 'function') {
       window.portalTokenPickerInit(root);
     }

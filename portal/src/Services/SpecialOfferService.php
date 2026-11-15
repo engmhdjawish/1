@@ -1684,6 +1684,11 @@ final class SpecialOfferService
             $purchaseUsd = self::toNullableFloat((string) ($d['unitPurchasePriceUsd'] ?? $d['UnitPurchasePriceUsd'] ?? $d['endUser'] ?? $d['EndUser'] ?? ''));
             $currencyVal = self::toNullableFloat((string) ($d['currencyVal'] ?? $d['CurrencyVal'] ?? ''));
             $imageGuid = trim((string) ($d['productImageGuid'] ?? $d['ProductImageGuid'] ?? $d['pictureGuid'] ?? $d['PictureGuid'] ?? ''));
+            $warehouseQty = self::toNullableFloat((string) ($d['warehouseQuantity'] ?? $d['WarehouseQuantity'] ?? ''));
+            $packaging = ShareCartService::packaging($d);
+            $availablePackages = $warehouseQty !== null
+                ? max(0.0, round($warehouseQty / max(0.0001, $packaging), 4))
+                : null;
             $items[] = [
                 'guid' => $guid,
                 'name' => trim((string) ($d['name'] ?? $d['Name'] ?? '')),
@@ -1695,6 +1700,9 @@ final class SpecialOfferService
                 'unitSalePriceSyp' => $saleSyp,
                 'unitPurchasePriceUsd' => $purchaseUsd,
                 'currencyVal' => $currencyVal,
+                'warehouseQuantity' => $warehouseQty,
+                'packageConversionFactor' => $packaging,
+                'availablePackages' => $availablePackages,
             ];
         }
 

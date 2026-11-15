@@ -200,7 +200,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       <?php if ($editId !== ''): ?>
         <button type="submit" form="so-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="special-offer-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="special-offer-save-btn" data-dashboard-save-btn data-loading-label="جاري الحفظ…" class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء العرض' ?>
       </button>
     </div>
@@ -440,7 +440,14 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       <p id="so-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pt-8 flex-1"></p>
     </div>
 
-    <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
+    <?php
+      // In per-material (invoice) mode the table is the source of truth — suppress chip chrome.
+      // Hidden inputs still render so GUIDs submit; search above adds rows into the invoice.
+      $manualPickerClass = $pricingScope === 'per_material' ? 'hidden so-manual-picker--invoice' : '';
+    ?>
+    <div class="<?= h($manualPickerClass) ?>" data-so-manual-picker-wrap>
+      <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
+    </div>
 
     <div id="per-material-pricing-panel" class="so-invoice mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
       <div class="so-invoice__head">

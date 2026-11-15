@@ -289,7 +289,7 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
   <?php endif; ?>
 </div>
 
-<form method="post" action="/dashboard/stagnant-inventory.php" id="stagnant-offer-form">
+<form method="post" action="/dashboard/stagnant-inventory.php" id="stagnant-offer-form" data-dashboard-ajax data-stagnant-offer-form>
   <input type="hidden" name="action" value="create_offer">
   <input type="hidden" name="minAgeDays" value="<?= (int) $minAgeDays ?>">
   <input type="hidden" name="maxAgeDays" value="<?= $maxAgeDays !== null ? (int) $maxAgeDays : '' ?>">
@@ -323,19 +323,20 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
         <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
       </label>
       <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
-      <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" disabled>
+      <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" data-loading-label="جاري الحفظ…" disabled>
         حفظ مسودة (<span data-stagnant-selected-count>0</span>)
       </button>
-      <button type="submit" class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-110 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="activate" disabled>
+      <button type="submit" class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-110 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="activate" data-loading-label="جاري التفعيل…" disabled>
         تفعيل العرض
       </button>
+      <span class="text-sm font-bold text-slate-600 hidden" data-stagnant-saving-hint aria-live="polite">جاري الحفظ…</span>
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
     </div>
     <div>
       <div class="flex items-center justify-between gap-2 mb-2">
         <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
-        <p class="text-xs text-text-muted">الجدول يبقى كاملاً — المضاف يُعلَّم مكانه، والتعديل التفصيلي هنا</p>
+        <p class="text-xs text-text-muted">الجدول ثابت — المرشّحون يُضافون في نهاية هذه القائمة فقط</p>
       </div>
       <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[4.5rem] max-h-56 overflow-y-auto" data-stagnant-tray-list>
         <p class="text-xs text-text-muted px-3 py-4 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>

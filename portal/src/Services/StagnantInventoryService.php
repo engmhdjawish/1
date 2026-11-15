@@ -147,6 +147,19 @@ final class StagnantInventoryService
             $title = 'عرض تصريف راكد ' . date('Y-m-d');
         }
 
+        // Snapshot current warehouse packages as a fixed cap (كمية ثابتة = الرصيد الحالي).
+        $materialsByGuid = [];
+        try {
+            $fetched = MaterialBatchService::fetchByGuids($guids, 45);
+            foreach ($fetched as $key => $payload) {
+                if (is_array($payload)) {
+                    $materialsByGuid[strtolower(trim((string) $key))] = $payload;
+                }
+            }
+        } catch (\Throwable) {
+            $materialsByGuid = [];
+        }
+
         $overrides = [];
         foreach ($guids as $guid) {
             $raw = $perMaterialPercents[$guid]
@@ -154,11 +167,15 @@ final class StagnantInventoryService
                 ?? $defaultPercent;
             $pct = is_numeric($raw) ? (float) $raw : $defaultPercent;
             $pct = max(0.01, min(95.0, $pct));
+            $material = $materialsByGuid[strtolower($guid)] ?? null;
+            $packages = is_array($material)
+                ? self::packagesFromMaterial($material)
+                : null;
             $overrides[$guid] = [
                 'discount_type' => 'percent',
                 'discount_percent' => $pct,
-                // Exit the offer when warehouse stock for the material is gone.
-                'qty_mode' => 'stock',
+                'qty_mode' => 'fixed',
+                'qty_cap_packages' => $packages !== null ? $packages : 0,
             ];
         }
 
@@ -284,5 +301,24 @@ final class StagnantInventoryService
         }
 
         return null;
+    }
+
+    /**
+     * Current sellable packages from an API material payload (warehouse qty / packaging).
+     *
+     * @param array<string, mixed> $material
+     */
+    private static function packagesFromMaterial(array $material): float
+    {
+        $packaging = max(0.0001, ShareCartService::packaging($material));
+        $warehouse = 0.0;
+        foreach (['warehouseQuantity', 'WarehouseQuantity', 'warehouse_quantity', 'stagnantRemainingQty'] as $key) {
+            if (isset($material[$key]) && is_numeric((string) $material[$key])) {
+                $warehouse = max(0.0, (float) $material[$key]);
+                break;
+            }
+        }
+
+        return max(0.0, round($warehouse / $packaging, 4));
     }
 }

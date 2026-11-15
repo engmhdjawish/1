@@ -4,10 +4,14 @@
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
-  /** @type {Map<string, {guid:string, name:string, code:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null}>} */
+  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null}>} */
   const candidates = new Map();
+  /** Insertion order for tray rows — always append new candidates at the end. */
+  /** @type {string[]} */
+  const candidateOrder = [];
   let activeRow = null;
   let syncingPreview = false;
+  let savingOffer = false;
 
   function roundUpTo5(amount) {
     if (!(amount > 0)) return 0;
@@ -96,8 +100,45 @@
       el.textContent = String(count);
     });
     root.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
-      if (btn instanceof HTMLButtonElement) btn.disabled = count === 0;
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = savingOffer || count === 0;
+      }
     });
+    const hint = root.querySelector('[data-stagnant-saving-hint]');
+    if (hint instanceof HTMLElement) {
+      hint.classList.toggle('hidden', !savingOffer);
+      hint.textContent = savingOffer ? 'جاري الحفظ…' : '';
+    }
+  }
+
+  function setSavingState(form, saving, submitter) {
+    savingOffer = saving;
+    form.classList.toggle('is-saving', saving);
+    form.setAttribute('aria-busy', saving ? 'true' : 'false');
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (saving) {
+        if (!btn.dataset.stagnantLabel) {
+          btn.dataset.stagnantLabel = btn.innerHTML || '';
+        }
+        const label = btn.getAttribute('data-loading-label') || 'جاري الحفظ…';
+        if (btn === submitter || !submitter) {
+          btn.textContent = label;
+        }
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+      } else {
+        if (btn.dataset.stagnantLabel) {
+          btn.innerHTML = btn.dataset.stagnantLabel;
+          delete btn.dataset.stagnantLabel;
+        }
+        btn.classList.remove('is-loading');
+      }
+    });
+    form.querySelectorAll('[data-stagnant-add], [data-stagnant-add-visible], [data-stagnant-clear-tray]').forEach((el) => {
+      if (el instanceof HTMLButtonElement) el.disabled = saving;
+    });
+    syncSubmitState(document);
   }
 
   function applyBelowCost(row, saleAfterUsd) {
@@ -179,7 +220,7 @@
       const item = candidates.get(guid);
       item.percent = pct;
       item.priceUsd = after;
-      renderTray();
+      updateTrayItemPricing(item);
     }
   }
 
@@ -213,7 +254,7 @@
       const item = candidates.get(guid);
       item.percent = pct;
       item.priceUsd = after;
-      renderTray();
+      updateTrayItemPricing(item);
     }
   }
 
@@ -245,6 +286,7 @@
     const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
     if (!guid) return false;
     const pricing = readRowPricing(row);
+    const isNew = !candidates.has(guid);
     candidates.set(guid, {
       guid,
       name: row.getAttribute('data-name') || guid,
@@ -256,8 +298,15 @@
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
     });
+    if (isNew) {
+      candidateOrder.push(guid);
+    }
     markRowInTray(row, true);
-    renderTray();
+    if (isNew) {
+      appendTrayItem(candidates.get(guid), true);
+    } else {
+      updateTrayItemPricing(candidates.get(guid));
+    }
     syncSubmitState();
     syncPreviewPricingFromRow();
     updateNavControls();
@@ -266,14 +315,188 @@
 
   function removeCandidate(guid) {
     candidates.delete(guid);
+    const orderIdx = candidateOrder.indexOf(guid);
+    if (orderIdx >= 0) candidateOrder.splice(orderIdx, 1);
     const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
     if (row instanceof HTMLElement) {
       markRowInTray(row, false);
     }
-    renderTray();
+    const trayRow = document.querySelector('[data-tray-guid="' + guid + '"]');
+    trayRow?.remove();
+    const list = document.querySelector('[data-stagnant-tray-list]');
+    if (list instanceof HTMLElement && candidates.size === 0) {
+      list.innerHTML = '';
+      const empty = document.createElement('p');
+      empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
+      empty.setAttribute('data-stagnant-tray-empty', '');
+      empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
+      list.appendChild(empty);
+    }
     syncSubmitState();
     if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
     updateNavControls();
+  }
+
+  function updateTrayItemPricing(item) {
+    if (!item) return;
+    const trayRow = document.querySelector('[data-tray-guid="' + item.guid + '"]');
+    if (!(trayRow instanceof HTMLElement)) {
+      appendTrayItem(item, false);
+      return;
+    }
+    const pctInput = trayRow.querySelector('input[name^="material_discount"]');
+    const priceInput = trayRow.querySelector('[data-tray-price]');
+    const sypEl = trayRow.querySelector('[data-tray-syp]');
+    if (pctInput instanceof HTMLInputElement && document.activeElement !== pctInput) {
+      pctInput.value = formatPct(item.percent);
+    }
+    if (priceInput instanceof HTMLInputElement && document.activeElement !== priceInput) {
+      priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
+    }
+    if (sypEl instanceof HTMLElement) {
+      if (item.priceUsd !== null && item.rate > 0) {
+        sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
+      } else {
+        sypEl.textContent = '—';
+      }
+      const below = !!(item.purchaseUsd && item.priceUsd !== null && item.priceUsd < item.purchaseUsd);
+      sypEl.classList.toggle('is-below-cost', below);
+      if (priceInput instanceof HTMLElement) priceInput.classList.toggle('is-below-cost', below);
+    }
+  }
+
+  function appendTrayItem(item, scrollIntoView) {
+    const list = document.querySelector('[data-stagnant-tray-list]');
+    if (!(list instanceof HTMLElement) || !item) return;
+    list.querySelector('[data-stagnant-tray-empty]')?.remove();
+    if (list.querySelector('[data-tray-guid="' + item.guid + '"]')) {
+      updateTrayItemPricing(item);
+      return;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
+    row.setAttribute('data-tray-guid', item.guid);
+
+    const thumb = document.createElement('div');
+    thumb.className = 'w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
+    if (item.image) {
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.name;
+      img.loading = 'lazy';
+      img.className = 'w-full h-full object-cover';
+      thumb.appendChild(img);
+    }
+
+    const title = document.createElement('div');
+    title.className = 'min-w-[10rem] flex-1';
+    title.innerHTML = '<div class="text-sm font-bold text-slate-900 leading-snug"></div>'
+      + '<div class="text-[11px] font-mono text-text-muted" dir="ltr"></div>';
+    title.querySelector('div').textContent = item.name;
+    title.querySelectorAll('div')[1].textContent = item.code;
+
+    const pctLabel = document.createElement('label');
+    pctLabel.className = 'text-[11px] font-bold text-slate-600';
+    pctLabel.textContent = 'خصم % ';
+    const pctInput = document.createElement('input');
+    pctInput.type = 'text';
+    pctInput.inputMode = 'decimal';
+    pctInput.autocomplete = 'off';
+    pctInput.className = 'w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+    pctInput.name = 'material_discount[' + item.guid + ']';
+    pctInput.value = formatPct(item.percent);
+    pctInput.addEventListener('input', () => {
+      const pct = parseLoose(pctInput.value);
+      if (pct === null) return;
+      item.percent = Math.max(0, Math.min(95, pct));
+      if (item.saleUsd && item.saleUsd > 0) {
+        item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+        priceInput.value = formatUsd(item.priceUsd);
+        sypEl.textContent = item.rate > 0
+          ? formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س'
+          : '—';
+        sypEl.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+        priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+      }
+      syncSourceRow(item);
+    });
+    pctInput.addEventListener('blur', () => {
+      item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
+      pctInput.value = formatPct(item.percent);
+      if (item.saleUsd && item.saleUsd > 0) {
+        item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+        priceInput.value = formatUsd(item.priceUsd);
+      }
+      syncSourceRow(item);
+    });
+    pctLabel.appendChild(pctInput);
+
+    const priceLabel = document.createElement('label');
+    priceLabel.className = 'text-[11px] font-bold text-slate-600';
+    priceLabel.textContent = 'بعد $ ';
+    const priceInput = document.createElement('input');
+    priceInput.type = 'text';
+    priceInput.inputMode = 'decimal';
+    priceInput.autocomplete = 'off';
+    priceInput.className = 'w-20 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+    priceInput.setAttribute('data-tray-price', '');
+    priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
+    priceInput.disabled = !(item.saleUsd > 0);
+    priceInput.addEventListener('input', () => {
+      const after = parseLoose(priceInput.value);
+      if (after === null || !(item.saleUsd > 0)) return;
+      item.priceUsd = Math.max(0, Math.min(item.saleUsd, after));
+      item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+      pctInput.value = formatPct(item.percent);
+      sypEl.textContent = item.rate > 0
+        ? formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س'
+        : '—';
+      const below = !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd);
+      sypEl.classList.toggle('is-below-cost', below);
+      priceInput.classList.toggle('is-below-cost', below);
+      syncSourceRow(item);
+    });
+    priceInput.addEventListener('blur', () => {
+      if (!(item.saleUsd > 0)) return;
+      item.priceUsd = Math.max(0, Math.min(item.saleUsd, parseLoose(priceInput.value) ?? item.priceUsd ?? 0));
+      priceInput.value = formatUsd(item.priceUsd);
+      item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+      pctInput.value = formatPct(item.percent);
+      syncSourceRow(item);
+    });
+    priceLabel.appendChild(priceInput);
+
+    const sypEl = document.createElement('span');
+    sypEl.className = 'text-xs font-extrabold tabular-nums text-emerald-800 min-w-[4rem]';
+    sypEl.dir = 'ltr';
+    sypEl.setAttribute('data-tray-syp', '');
+    if (item.priceUsd !== null && item.rate > 0) {
+      sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
+      if (item.purchaseUsd && item.priceUsd < item.purchaseUsd) {
+        sypEl.classList.add('is-below-cost');
+        priceInput.classList.add('is-below-cost');
+      }
+    } else {
+      sypEl.textContent = '—';
+    }
+
+    const guidHidden = document.createElement('input');
+    guidHidden.type = 'hidden';
+    guidHidden.name = 'material_guids[]';
+    guidHidden.value = item.guid;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
+    removeBtn.textContent = 'إزالة';
+    removeBtn.addEventListener('click', () => removeCandidate(item.guid));
+
+    row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
+    list.appendChild(row);
+    if (scrollIntoView) {
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 
   function renderTray() {
@@ -281,7 +504,7 @@
     if (!(list instanceof HTMLElement)) return;
     list.innerHTML = '';
 
-    if (candidates.size === 0) {
+    if (candidateOrder.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
       empty.setAttribute('data-stagnant-tray-empty', '');
@@ -290,125 +513,9 @@
       return;
     }
 
-    candidates.forEach((item) => {
-      const row = document.createElement('div');
-      row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
-      row.setAttribute('data-tray-guid', item.guid);
-
-      const thumb = document.createElement('div');
-      thumb.className = 'w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
-      if (item.image) {
-        const img = document.createElement('img');
-        img.src = item.image;
-        img.alt = item.name;
-        img.loading = 'lazy';
-        img.className = 'w-full h-full object-cover';
-        thumb.appendChild(img);
-      }
-
-      const title = document.createElement('div');
-      title.className = 'min-w-[10rem] flex-1';
-      title.innerHTML = '<div class="text-sm font-bold text-slate-900 leading-snug"></div>'
-        + '<div class="text-[11px] font-mono text-text-muted" dir="ltr"></div>';
-      title.querySelector('div').textContent = item.name;
-      title.querySelectorAll('div')[1].textContent = item.code;
-
-      const pctLabel = document.createElement('label');
-      pctLabel.className = 'text-[11px] font-bold text-slate-600';
-      pctLabel.textContent = 'خصم % ';
-      const pctInput = document.createElement('input');
-      pctInput.type = 'text';
-      pctInput.inputMode = 'decimal';
-      pctInput.autocomplete = 'off';
-      pctInput.className = 'w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
-      pctInput.name = 'material_discount[' + item.guid + ']';
-      pctInput.value = formatPct(item.percent);
-      pctInput.addEventListener('input', () => {
-        const pct = parseLoose(pctInput.value);
-        if (pct === null) return;
-        item.percent = Math.max(0, Math.min(95, pct));
-        if (item.saleUsd && item.saleUsd > 0) {
-          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
-          priceInput.value = formatUsd(item.priceUsd);
-          sypEl.textContent = item.rate > 0
-            ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
-            : '—';
-          sypEl.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
-          priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
-        }
-        syncSourceRow(item);
-      });
-      pctInput.addEventListener('blur', () => {
-        item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
-        pctInput.value = formatPct(item.percent);
-        if (item.saleUsd && item.saleUsd > 0) {
-          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
-          priceInput.value = formatUsd(item.priceUsd);
-        }
-        syncSourceRow(item);
-      });
-      pctLabel.appendChild(pctInput);
-
-      const priceLabel = document.createElement('label');
-      priceLabel.className = 'text-[11px] font-bold text-slate-600';
-      priceLabel.textContent = 'بعد $ ';
-      const priceInput = document.createElement('input');
-      priceInput.type = 'text';
-      priceInput.inputMode = 'decimal';
-      priceInput.autocomplete = 'off';
-      priceInput.className = 'w-20 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
-      priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
-      priceInput.disabled = !(item.saleUsd > 0);
-      priceInput.addEventListener('input', () => {
-        const after = parseLoose(priceInput.value);
-        if (after === null || !(item.saleUsd > 0)) return;
-        item.priceUsd = Math.max(0, Math.min(item.saleUsd, after));
-        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
-        pctInput.value = formatPct(item.percent);
-        sypEl.textContent = item.rate > 0
-          ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
-          : '—';
-        const below = !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd);
-        sypEl.classList.toggle('is-below-cost', below);
-        priceInput.classList.toggle('is-below-cost', below);
-        syncSourceRow(item);
-      });
-      priceInput.addEventListener('blur', () => {
-        if (!(item.saleUsd > 0)) return;
-        item.priceUsd = Math.max(0, Math.min(item.saleUsd, parseLoose(priceInput.value) ?? item.priceUsd ?? 0));
-        priceInput.value = formatUsd(item.priceUsd);
-        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
-        pctInput.value = formatPct(item.percent);
-        syncSourceRow(item);
-      });
-      priceLabel.appendChild(priceInput);
-
-      const sypEl = document.createElement('span');
-      sypEl.className = 'text-xs font-extrabold tabular-nums text-emerald-800 min-w-[4rem]';
-      sypEl.dir = 'ltr';
-      if (item.priceUsd !== null && item.rate > 0) {
-        sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
-        if (item.purchaseUsd && item.priceUsd < item.purchaseUsd) {
-          sypEl.classList.add('is-below-cost');
-          priceInput.classList.add('is-below-cost');
-        }
-      } else {
-        sypEl.textContent = '—';
-      }
-
-      const guidHidden = document.createElement('input');
-      guidHidden.type = 'hidden';
-      guidHidden.name = 'material_guids[]';
-      guidHidden.value = item.guid;
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
-      removeBtn.textContent = 'إزالة';
-      removeBtn.addEventListener('click', () => removeCandidate(item.guid));
-
-      row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
-      list.appendChild(row);
+    candidateOrder.forEach((guid) => {
+      const item = candidates.get(guid);
+      if (item) appendTrayItem(item, false);
     });
   }
 
@@ -658,6 +765,35 @@
       if (addBtn instanceof HTMLButtonElement) {
         const row = addBtn.closest('[data-stagnant-card]');
         if (row instanceof HTMLElement) addCandidateFromRow(row);
+      }
+    });
+
+    form.addEventListener('submit', (event) => {
+      if (savingOffer) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (candidates.size === 0) {
+        event.preventDefault();
+        return;
+      }
+      const submitter = event.submitter instanceof HTMLButtonElement
+        ? event.submitter
+        : form.querySelector('[data-stagnant-submit]:not([disabled])');
+      setSavingState(form, true, submitter instanceof HTMLButtonElement ? submitter : null);
+      // AJAX path (data-dashboard-ajax) keeps the page alive; clear saving if navigate fails later.
+      window.setTimeout(() => {
+        if (document.getElementById('stagnant-offer-form') === form && savingOffer) {
+          // Still on the same form after a long wait — keep spinner (save may still be running).
+        }
+      }, 0);
+    });
+
+    // Reset saving UI when dashboard AJAX finishes (success navigates away; errors stay).
+    document.addEventListener('dashboard:ajax-done', () => {
+      if (document.getElementById('stagnant-offer-form') === form) {
+        setSavingState(form, false, null);
       }
     });
 

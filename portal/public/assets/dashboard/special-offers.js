@@ -8,21 +8,28 @@
 
   window.portalSpecialOffersInit = (root = document) => {
     const form = root.querySelector('#special-offer-form');
-    if (!form || boundRoots.has(form)) {
+    if (!form || !form.isConnected) {
+      return;
+    }
+    // Re-bind when SPA navigation reused a detached form entry in the WeakSet.
+    if (boundRoots.has(form) && form.getAttribute('data-so-js-bound') === '1') {
       return;
     }
     boundRoots.add(form);
+    form.setAttribute('data-so-js-bound', '1');
 
-    const modeSelect = root.querySelector('#selection_mode');
-    const filterPanel = root.querySelector('#filter-mode-panel');
-    const manualPanel = root.querySelector('#manual-mode-panel');
-    const pricingScope = root.querySelector('#pricing_scope');
-    const perMaterialPanel = root.querySelector('#per-material-pricing-panel');
-    const perMaterialRows = root.querySelector('#per-material-pricing-rows');
+    const scope = form;
+    const modeSelect = scope.querySelector('#selection_mode');
+    const filterPanel = scope.querySelector('#filter-mode-panel');
+    const manualPanel = scope.querySelector('#manual-mode-panel');
+    const pricingScope = scope.querySelector('#pricing_scope');
+    const perMaterialPanel = scope.querySelector('#per-material-pricing-panel');
+    const perMaterialRows = scope.querySelector('#per-material-pricing-rows');
 
     const readJson = (id, fallback) => {
-      const node = root.querySelector(id);
-      if (!node) return fallback;
+      // Prefer nodes inside the live form/main so SPA body clones of JSON scripts are ignored.
+      const node = scope.querySelector(id) || root.querySelector(id);
+      if (!node || !node.isConnected) return fallback;
       try {
         return JSON.parse(node.textContent || '') ?? fallback;
       } catch (_) {
@@ -79,17 +86,28 @@
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
       const perMaterial = pricingScope?.value === 'per_material' && isManual;
-      root.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
-      root.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
-      root.querySelector('[data-picker-id="so-manual-materials"]')?.classList.toggle('hidden', perMaterial);
-      root.querySelectorAll('.so-unified-discount').forEach((el) => {
+      scope.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
+      scope.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
+      // Hide chip picker chrome in invoice mode — table owns the material list.
+      const pickerWrap = scope.querySelector('[data-so-manual-picker-wrap]');
+      const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
+      if (pickerWrap) {
+        pickerWrap.classList.toggle('hidden', perMaterial);
+        pickerWrap.classList.toggle('so-manual-picker--invoice', perMaterial);
+      } else {
+        picker?.classList.toggle('hidden', perMaterial);
+      }
+      if (picker) {
+        picker.setAttribute('data-suppress-chips', perMaterial ? '1' : '0');
+      }
+      scope.querySelectorAll('.so-unified-discount').forEach((el) => {
         if (perMaterial) {
           el.classList.add('hidden');
         }
       });
       if (perMaterial) {
         ['#field-percent', '#field-amount-syp', '#field-amount-usd', '#field-syp', '#field-usd', '#offer-discount-type-wrap'].forEach((sel) => {
-          root.querySelector(sel)?.classList.add('hidden');
+          scope.querySelector(sel)?.classList.add('hidden');
         });
       } else {
         syncDiscount();
@@ -98,14 +116,14 @@
     };
     modeSelect?.addEventListener('change', syncPanels);
 
-    const discountType = root.querySelector('#discount_type');
+    const discountType = scope.querySelector('#discount_type');
     const syncDiscount = () => {
       const type = discountType?.value || 'percent';
-      root.querySelector('#field-percent')?.classList.toggle('hidden', type !== 'percent');
-      root.querySelector('#field-amount-syp')?.classList.toggle('hidden', type !== 'fixed_amount');
-      root.querySelector('#field-amount-usd')?.classList.toggle('hidden', type !== 'fixed_amount');
-      root.querySelector('#field-syp')?.classList.toggle('hidden', type !== 'fixed_price');
-      root.querySelector('#field-usd')?.classList.toggle('hidden', type !== 'fixed_price');
+      scope.querySelector('#field-percent')?.classList.toggle('hidden', type !== 'percent');
+      scope.querySelector('#field-amount-syp')?.classList.toggle('hidden', type !== 'fixed_amount');
+      scope.querySelector('#field-amount-usd')?.classList.toggle('hidden', type !== 'fixed_amount');
+      scope.querySelector('#field-syp')?.classList.toggle('hidden', type !== 'fixed_price');
+      scope.querySelector('#field-usd')?.classList.toggle('hidden', type !== 'fixed_price');
     };
     discountType?.addEventListener('change', syncDiscount);
     syncDiscount();
@@ -133,7 +151,7 @@
       const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
         : [];
-      const fromDom = Array.from(root.querySelectorAll('input[name="manual_material_guids[]"]'))
+      const fromDom = Array.from(scope.querySelectorAll('input[name="manual_material_guids[]"]'))
         .map((input) => String(input.value || '').toLowerCase());
       const fromRows = Array.from(perMaterialRows?.querySelectorAll('[data-override-guid]') || [])
         .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase());
@@ -318,9 +336,16 @@
       valueCell.appendChild(valueWrap);
       tr.appendChild(valueCell);
 
-      const qtyMode = ['unlimited', 'stock', 'fixed'].includes(String(current.qty_mode || ''))
+      // Prefer stored override; otherwise default new invoice rows to fixed = current packages.
+      let qtyMode = ['unlimited', 'stock', 'fixed'].includes(String(current.qty_mode || ''))
         ? String(current.qty_mode)
-        : 'unlimited';
+        : 'fixed';
+      if (current.qty_mode == null || current.qty_mode === '') {
+        qtyMode = 'fixed';
+        if ((current.qty_cap_packages == null || current.qty_cap_packages === '') && meta.availablePackages != null) {
+          current.qty_cap_packages = meta.availablePackages;
+        }
+      }
       const qtyCell = document.createElement('td');
       qtyCell.className = 'so-invoice__qty';
       const qtyWrap = document.createElement('div');
@@ -522,7 +547,7 @@
           });
         }
 
-        const countEl = root.querySelector('#so-invoice-count');
+        const countEl = scope.querySelector('#so-invoice-count');
         const countLabel = selected.length === 0
           ? 'لا مواد'
           : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
@@ -658,7 +683,7 @@
     });
 
     // Keep per-material rows in sync when token chips change (debounced; ignore self-writes).
-    const picker = root.querySelector('[data-picker-id="so-manual-materials"]');
+    const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
     const hiddenHost = picker?.querySelector('[data-role="hidden-inputs"]');
     if (hiddenHost && typeof MutationObserver !== 'undefined') {
       let observerTimer = null;
@@ -695,17 +720,19 @@
       const selected = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials')
         : [];
-      if (selected.length > 0) return;
+      const rowCount = perMaterialRows?.querySelectorAll('[data-override-guid]')?.length || 0;
+      if (selected.length > 0 || rowCount > 0) return;
       event.preventDefault();
-      const status = root.querySelector('#so-material-search-status');
+      const status = scope.querySelector('#so-material-search-status');
       if (status) status.textContent = 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.';
     });
 
-    const searchInput = root.querySelector('#so-material-search');
-    const resultsEl = root.querySelector('#so-material-search-results');
-    const searchWrap = root.querySelector('#so-material-search-wrap');
-    const statusEl = root.querySelector('#so-material-search-status');
+    const searchInput = scope.querySelector('#so-material-search');
+    const resultsEl = scope.querySelector('#so-material-search-results');
+    const searchWrap = scope.querySelector('#so-material-search-wrap');
+    const statusEl = scope.querySelector('#so-material-search-status');
     if (!searchInput) {
+      // Invoice/pricing UI is already bound above; search is optional when panel absent.
       return;
     }
 
@@ -798,7 +825,23 @@
       unitSalePriceSyp: item.unitSalePriceSyp ?? item.whole ?? item.Whole ?? null,
       unitPurchasePriceUsd: item.unitPurchasePriceUsd ?? item.endUser ?? item.EndUser ?? null,
       currencyVal: item.currencyVal ?? item.CurrencyVal ?? null,
+      warehouseQuantity: item.warehouseQuantity ?? item.WarehouseQuantity ?? null,
+      packageConversionFactor: item.packageConversionFactor ?? item.PackageConversionFactor ?? null,
+      availablePackages: item.availablePackages ?? null,
     });
+
+    const packagesFromMeta = (meta) => {
+      if (meta?.availablePackages != null && Number.isFinite(Number(meta.availablePackages))) {
+        return Math.max(0, Number(meta.availablePackages));
+      }
+      const warehouse = Number(meta?.warehouseQuantity);
+      const packaging = Number(meta?.packageConversionFactor);
+      if (Number.isFinite(warehouse) && warehouse >= 0) {
+        const factor = Number.isFinite(packaging) && packaging > 0 ? packaging : 1;
+        return Math.max(0, Math.round((warehouse / factor) * 10000) / 10000);
+      }
+      return null;
+    };
 
     const applyLabelMeta = (guid, item) => {
       const prices = pricesFromItem(item || {});
@@ -812,6 +855,12 @@
         unitSalePriceSyp: prices.unitSalePriceSyp ?? prev.unitSalePriceSyp ?? null,
         unitPurchasePriceUsd: prices.unitPurchasePriceUsd ?? prev.unitPurchasePriceUsd ?? null,
         currencyVal: prices.currencyVal ?? prev.currencyVal ?? null,
+        warehouseQuantity: prices.warehouseQuantity ?? prev.warehouseQuantity ?? null,
+        packageConversionFactor: prices.packageConversionFactor ?? prev.packageConversionFactor ?? null,
+        availablePackages: prices.availablePackages ?? prev.availablePackages ?? packagesFromMeta({
+          warehouseQuantity: prices.warehouseQuantity ?? prev.warehouseQuantity,
+          packageConversionFactor: prices.packageConversionFactor ?? prev.packageConversionFactor,
+        }),
       };
       return labelMap[guid];
     };
@@ -852,7 +901,14 @@
       }
       const meta = applyLabelMeta(guid, item);
       if (!overridesState[guid]) {
-        overridesState[guid] = { discount_type: 'percent', discount_percent: '10' };
+        const packages = packagesFromMeta(meta);
+        overridesState[guid] = {
+          discount_type: 'percent',
+          discount_percent: '10',
+          // Default: fixed qty = current warehouse packages (كمية ثابتة = الرصيد الحالي).
+          qty_mode: 'fixed',
+          qty_cap_packages: packages != null ? String(packages) : '',
+        };
       }
       const refreshInvoice = () => {
         if (pricingScope?.value === 'per_material') {

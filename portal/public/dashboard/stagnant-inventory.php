@@ -9,6 +9,7 @@ use Portal\Services\ApiClient;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StagnantInventoryService;
 use Portal\Services\StoreSeasonService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('special_offers.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -129,11 +130,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         if ($asDraft) {
             $editUrl .= '&draft=1';
         }
+        $okMessage = $asDraft
+            ? 'تم حفظ مسودة العرض.'
+            : 'تم تفعيل العرض.';
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json(true, $okMessage, ['redirect' => $editUrl]);
+        }
         header('Location: ' . $editUrl);
         exit;
     }
     $flash = $result['message'] ?? 'تعذر إنشاء العرض.';
     $flashType = 'error';
+    if (DashboardHttp::wantsJson()) {
+        DashboardHttp::json(false, (string) $flash);
+    }
 }
 
 $materialFilterOptions = [
