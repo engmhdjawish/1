@@ -363,6 +363,20 @@ final class OrderService
         );
         NotificationService::notifyCustomerOrderPlaced($orderId);
 
+        $touchedOfferIds = [];
+        foreach ($normalizedItems as $line) {
+            $oid = trim((string) ($line['special_offer_id'] ?? ''));
+            if ($oid !== '') {
+                $touchedOfferIds[$oid] = true;
+            }
+        }
+        foreach (array_keys($touchedOfferIds) as $oid) {
+            try {
+                SpecialOfferService::refreshExhaustedFlags((string) $oid);
+            } catch (\Throwable) {
+            }
+        }
+
         if ($visitorSessionId !== '') {
             $customerPayload = null;
             if ($webCustomerId !== null && trim($webCustomerId) !== '') {

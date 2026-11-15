@@ -2462,6 +2462,28 @@ button.is-loading::after,
   color: #78716c;
 }
 
+.so-invoice__qty-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 7.5rem;
+}
+
+.so-invoice__select--qty {
+  min-width: 7.5rem;
+}
+
+.so-invoice__exhausted {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.4rem;
+}
+
 .so-invoice__remove {
   height: 2rem;
   padding: 0 0.55rem;

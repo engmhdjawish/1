@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
+use Portal\Services\SpecialOfferAnalyticsService;
 use Portal\Services\SpecialOfferService;
 use Portal\Support\DashboardHttp;
 
@@ -199,9 +200,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $dbError = null;
 $stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
+$offerAnalyticsById = [];
+$editOfferAnalytics = null;
 try {
     $stats = SpecialOfferService::stats();
     $offers = SpecialOfferService::adminList();
+    $offerIds = array_map(static fn ($row): string => (string) ($row['id'] ?? ''), $offers);
+    $offerAnalyticsById = SpecialOfferAnalyticsService::summariesForOffers($offerIds);
 } catch (\Throwable $e) {
     $offers = [];
     $dbError = 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.';
@@ -216,6 +221,12 @@ if ($editId !== '') {
     if ($editOffer === null) {
         $editId = '';
         $showForm = $isNew;
+    } else {
+        try {
+            $editOfferAnalytics = SpecialOfferAnalyticsService::detailForOffer($editId);
+        } catch (\Throwable) {
+            $editOfferAnalytics = null;
+        }
     }
 }
 if ($showForm && $editOffer === null) {

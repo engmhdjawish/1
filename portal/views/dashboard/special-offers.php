@@ -15,9 +15,17 @@ use Portal\Support\PriceFx;
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $dbError */
+/** @var array<string, array<string, mixed>> $offerAnalyticsById */
+/** @var array{summary?: array<string, mixed>, materials?: list<array<string, mixed>>}|null $editOfferAnalytics */
 
 require __DIR__ . '/partials/token-picker.php';
 require __DIR__ . '/partials/media-picker.php';
+
+$offerAnalyticsById = is_array($offerAnalyticsById ?? null) ? $offerAnalyticsById : [];
+$editOfferAnalytics = is_array($editOfferAnalytics ?? null) ? $editOfferAnalytics : null;
+$fmtInt = static fn ($n): string => number_format((float) $n, 0);
+$fmtMoneyAr = static fn ($n, int $d = 0): string => number_format((float) $n, $d, '.', ',');
+
 
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
@@ -455,6 +463,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
               <th>شراء $</th>
               <th class="so-invoice__type-col">نوع الحسم</th>
               <th>خصم % / سعر $</th>
+              <th>كمية العرض</th>
               <th>بعد الخصم ل.س</th>
               <th class="so-invoice__action-col"></th>
             </tr>
@@ -553,6 +562,30 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                       </label>
                     </div>
                   </td>
+                  <?php
+                    $qtyMode = (string) ($override['qty_mode'] ?? 'unlimited');
+                    if (!in_array($qtyMode, ['unlimited', 'stock', 'fixed'], true)) {
+                        $qtyMode = 'unlimited';
+                    }
+                    $qtyCap = $override['qty_cap_packages'] ?? '';
+                    $isExhausted = !empty($override['is_exhausted']);
+                  ?>
+                  <td class="so-invoice__qty">
+                    <div class="so-invoice__qty-fields">
+                      <select name="material_override[<?= h($guid) ?>][qty_mode]" data-field="qty_mode" class="so-invoice__select so-invoice__select--qty">
+                        <option value="unlimited" <?= $qtyMode === 'unlimited' ? 'selected' : '' ?>>بلا حد</option>
+                        <option value="stock" <?= $qtyMode === 'stock' ? 'selected' : '' ?>>المخزون المتاح</option>
+                        <option value="fixed" <?= $qtyMode === 'fixed' ? 'selected' : '' ?>>كمية محددة</option>
+                      </select>
+                      <label class="so-invoice__value-field<?= $qtyMode === 'fixed' ? '' : ' hidden' ?>" data-show-for-qty="fixed">
+                        <span class="text-text-muted whitespace-nowrap">طرد</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][qty_cap_packages]" data-field="qty_cap_packages" value="<?= h((string) $qtyCap) ?>" placeholder="مثلاً 20">
+                      </label>
+                      <?php if ($isExhausted): ?>
+                        <span class="so-invoice__exhausted">نفدت — خرجت من العرض</span>
+                      <?php endif; ?>
+                    </div>
+                  </td>
                   <td class="tabular-nums font-extrabold<?= $belowCost ? ' is-below-cost' : ' text-emerald-800' ?>" dir="ltr" data-after-syp>
                     <?= $afterSyp !== null ? h(number_format($afterSyp, 0)) : '—' ?>
                   </td>
@@ -607,6 +640,90 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
         <?php endif; ?>
       </div>
     </details>
+  <?php endif; ?>
+
+  <?php if ($editOfferAnalytics !== null && trim((string) ($editOffer['id'] ?? '')) !== ''): ?>
+    <?php
+      $an = is_array($editOfferAnalytics['summary'] ?? null) ? $editOfferAnalytics['summary'] : [];
+      $anMats = is_array($editOfferAnalytics['materials'] ?? null) ? $editOfferAnalytics['materials'] : [];
+    ?>
+    <article class="so-analytics bg-white border border-border-subtle rounded-xl p-4 mt-4">
+      <div class="flex flex-wrap items-end justify-between gap-2 mb-3">
+        <div>
+          <p class="text-[11px] font-bold text-primary tracking-wide">جدوى العرض</p>
+          <h3 class="font-extrabold text-slate-900 text-base">قياس التفاعل والمبيعات</h3>
+          <p class="text-xs text-text-muted mt-0.5">آخر 90 يوماً للمشاهدات · المبيعات من طلبات مرتبطة بهذا العرض</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">طلبات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['orders'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">طرود مباعة</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['packages'] ?? 0, 1)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">إيراد ل.س</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['revenue_syp'] ?? 0, 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">خصم ممنوح ل.س</div>
+          <div class="text-xl font-extrabold tabular-nums text-amber-800"><?= h($fmtMoneyAr($an['discount_syp'] ?? 0, 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">مشاهدات / صفحات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['page_views'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">إضافة للسلة</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['add_to_cart'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">تحويل طلبات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= isset($an['conversion_pct']) && $an['conversion_pct'] !== null ? h((string) $an['conversion_pct']) . '%' : '—' ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">مواد بيعت</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['materials'] ?? 0)) ?></div>
+        </div>
+      </div>
+      <?php if ($anMats !== []): ?>
+        <div class="overflow-auto border border-border-subtle rounded-lg">
+          <table class="w-full text-sm min-w-[640px]">
+            <thead class="bg-surface-low text-text-muted">
+              <tr>
+                <th class="px-3 py-2 text-right font-bold">المادة</th>
+                <th class="px-3 py-2 text-right font-bold">طلبات</th>
+                <th class="px-3 py-2 text-right font-bold">طرود</th>
+                <th class="px-3 py-2 text-right font-bold">إيراد ل.س</th>
+                <th class="px-3 py-2 text-right font-bold">خصم ل.س</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle">
+              <?php foreach ($anMats as $mat): ?>
+                <?php if (!is_array($mat)) continue; ?>
+                <tr>
+                  <td class="px-3 py-2">
+                    <div class="font-bold"><?= h((string) ($mat['material_name_ar'] ?? $mat['material_guid'] ?? '')) ?></div>
+                    <?php if (!empty($mat['material_code'])): ?>
+                      <div class="text-[11px] text-text-muted"><?= h((string) $mat['material_code']) ?></div>
+                    <?php endif; ?>
+                  </td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtInt($mat['orders'] ?? 0)) ?></td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['packages'] ?? 0, 1)) ?></td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['revenue_syp'] ?? 0, 0)) ?></td>
+                  <td class="px-3 py-2 tabular-nums text-amber-800"><?= h($fmtMoneyAr($mat['discount_syp'] ?? 0, 0)) ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php else: ?>
+        <p class="text-xs text-text-muted">لا مبيعات مرتبطة بهذا العرض بعد.</p>
+      <?php endif; ?>
+    </article>
   <?php endif; ?>
 </form>
 <?php portal_render_token_picker_script(); ?>
@@ -687,8 +804,8 @@ foreach ($offers as $row) {
             <th class="px-4 py-3 text-right font-bold">العرض</th>
             <th class="px-4 py-3 text-right font-bold">الحسم</th>
             <th class="px-4 py-3 text-right font-bold">الوضع</th>
-            <th class="px-4 py-3 text-right font-bold">فلاتر</th>
             <th class="px-4 py-3 text-right font-bold">يدوي</th>
+            <th class="px-4 py-3 text-right font-bold">جدوى</th>
             <th class="px-4 py-3 text-right font-bold">الفترة</th>
             <th class="px-4 py-3 text-right font-bold">الحالة</th>
             <th class="px-4 py-3 text-left font-bold">إجراءات</th>
@@ -696,7 +813,10 @@ foreach ($offers as $row) {
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($visibleOffers as $row): ?>
-            <?php $lifecycle = (string) ($row['_lifecycle'] ?? 'paused'); ?>
+            <?php
+              $lifecycle = (string) ($row['_lifecycle'] ?? 'paused');
+              $rowAn = $offerAnalyticsById[(string) ($row['id'] ?? '')] ?? null;
+            ?>
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-3">
                 <div class="font-bold"><?= h((string) ($row['title_ar'] ?? '')) ?></div>
@@ -714,8 +834,16 @@ foreach ($offers as $row) {
                 <?= $rowDiscountLabel ?>
               </td>
               <td class="px-4 py-3 text-xs"><?= ($row['selection_mode'] ?? '') === 'manual' ? 'يدوي' : 'فلترة' ?></td>
-              <td class="px-4 py-3"><?= (int) ($row['filters_count'] ?? 0) ?></td>
               <td class="px-4 py-3"><?= (int) ($row['products_count'] ?? 0) ?></td>
+              <td class="px-4 py-3 text-xs">
+                <?php if (is_array($rowAn)): ?>
+                  <div class="font-bold tabular-nums"><?= h($fmtInt($rowAn['orders'] ?? 0)) ?> طلب</div>
+                  <div class="text-text-muted tabular-nums"><?= h($fmtMoneyAr($rowAn['revenue_syp'] ?? 0, 0)) ?> ل.س</div>
+                  <div class="text-[10px] text-text-muted tabular-nums"><?= h($fmtInt($rowAn['page_views'] ?? 0)) ?> مشاهدة · <?= h($fmtInt($rowAn['add_to_cart'] ?? 0)) ?> سلة</div>
+                <?php else: ?>
+                  <span class="text-text-muted">—</span>
+                <?php endif; ?>
+              </td>
               <td class="px-4 py-3 text-xs whitespace-nowrap">
                 <?= h(substr((string) ($row['starts_at'] ?? ''), 0, 10)) ?> — <?= !empty($row['ends_at']) ? h(substr((string) $row['ends_at'], 0, 10)) : '∞' ?>
               </td>

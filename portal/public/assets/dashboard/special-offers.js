@@ -123,6 +123,8 @@
           fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || '',
           fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || '',
           fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || '',
+          qty_mode: row.querySelector('[data-field="qty_mode"]')?.value || 'unlimited',
+          qty_cap_packages: row.querySelector('[data-field="qty_cap_packages"]')?.value || '',
         };
       });
     };
@@ -316,6 +318,71 @@
       valueCell.appendChild(valueWrap);
       tr.appendChild(valueCell);
 
+      const qtyMode = ['unlimited', 'stock', 'fixed'].includes(String(current.qty_mode || ''))
+        ? String(current.qty_mode)
+        : 'unlimited';
+      const qtyCell = document.createElement('td');
+      qtyCell.className = 'so-invoice__qty';
+      const qtyWrap = document.createElement('div');
+      qtyWrap.className = 'so-invoice__qty-fields';
+      const qtySelect = document.createElement('select');
+      qtySelect.name = `material_override[${guid}][qty_mode]`;
+      qtySelect.setAttribute('data-field', 'qty_mode');
+      qtySelect.className = 'so-invoice__select so-invoice__select--qty';
+      [
+        ['unlimited', 'بلا حد'],
+        ['stock', 'المخزون المتاح'],
+        ['fixed', 'كمية محددة'],
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        option.selected = qtyMode === value;
+        qtySelect.appendChild(option);
+      });
+      qtyWrap.appendChild(qtySelect);
+      const qtyCapBox = document.createElement('label');
+      qtyCapBox.className = 'so-invoice__value-field' + (qtyMode === 'fixed' ? '' : ' hidden');
+      qtyCapBox.setAttribute('data-show-for-qty', 'fixed');
+      const qtyCapCaption = document.createElement('span');
+      qtyCapCaption.className = 'text-text-muted whitespace-nowrap';
+      qtyCapCaption.textContent = 'طرد';
+      const qtyCapInput = document.createElement('input');
+      qtyCapInput.type = 'text';
+      qtyCapInput.inputMode = 'decimal';
+      qtyCapInput.autocomplete = 'off';
+      qtyCapInput.name = `material_override[${guid}][qty_cap_packages]`;
+      qtyCapInput.setAttribute('data-field', 'qty_cap_packages');
+      qtyCapInput.className = 'so-invoice__input';
+      qtyCapInput.placeholder = 'مثلاً 20';
+      qtyCapInput.value = current.qty_cap_packages != null ? String(current.qty_cap_packages) : '';
+      qtyCapBox.append(qtyCapCaption, qtyCapInput);
+      qtyWrap.appendChild(qtyCapBox);
+      if (current.is_exhausted) {
+        const exhausted = document.createElement('span');
+        exhausted.className = 'so-invoice__exhausted';
+        exhausted.textContent = 'نفدت — خرجت من العرض';
+        qtyWrap.appendChild(exhausted);
+      }
+      qtySelect.addEventListener('change', () => {
+        const mode = qtySelect.value || 'unlimited';
+        qtyCapBox.classList.toggle('hidden', mode !== 'fixed');
+        overridesState[guid] = {
+          ...(overridesState[guid] || {}),
+          qty_mode: mode,
+          qty_cap_packages: qtyCapInput.value,
+        };
+      });
+      qtyCapInput.addEventListener('input', () => {
+        overridesState[guid] = {
+          ...(overridesState[guid] || {}),
+          qty_mode: qtySelect.value || 'unlimited',
+          qty_cap_packages: qtyCapInput.value,
+        };
+      });
+      qtyCell.appendChild(qtyWrap);
+      tr.appendChild(qtyCell);
+
       const sypCell = document.createElement('td');
       sypCell.className = 'tabular-nums font-extrabold text-emerald-800';
       sypCell.dir = 'ltr';
@@ -471,7 +538,7 @@
         if (!selected.length) {
           const empty = document.createElement('tr');
           const cell = document.createElement('td');
-          cell.colSpan = 8;
+          cell.colSpan = 9;
           cell.className = 'so-invoice__empty';
           cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
           empty.appendChild(cell);
@@ -509,14 +576,24 @@
       rowsRoot.addEventListener('change', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
-        if (target.getAttribute('data-field') !== 'discount_type') return;
+        const field = target.getAttribute('data-field') || '';
         const row = target.closest('[data-override-guid]');
         if (!(row instanceof HTMLElement)) return;
-        const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
-        row.querySelectorAll('[data-show-for]').forEach((el) => {
-          const visible = el.getAttribute('data-show-for') === selected;
-          el.classList.toggle('hidden', !visible);
-        });
+        if (field === 'discount_type') {
+          const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
+          row.querySelectorAll('[data-show-for]').forEach((el) => {
+            const visible = el.getAttribute('data-show-for') === selected;
+            el.classList.toggle('hidden', !visible);
+          });
+          return;
+        }
+        if (field === 'qty_mode') {
+          const mode = target instanceof HTMLSelectElement ? target.value : 'unlimited';
+          row.querySelectorAll('[data-show-for-qty]').forEach((el) => {
+            const visible = el.getAttribute('data-show-for-qty') === mode;
+            el.classList.toggle('hidden', !visible);
+          });
+        }
       });
       rowsRoot.addEventListener('input', (event) => {
         const target = event.target;

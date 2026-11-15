@@ -855,6 +855,7 @@ final class SpecialOfferService
                 'has_offer' => true,
                 'offer' => is_array($material['offer'] ?? null) ? $material['offer'] : null,
                 'offer_badge' => trim((string) ($material['offer_badge'] ?? '')),
+                'offer_slug' => trim((string) ($material['offer_slug'] ?? '')),
             ], array_intersect_key($material, array_flip([
                 'original_unit_sale_price_sp',
                 'original_unit_sale_price_usd',
@@ -889,6 +890,7 @@ final class SpecialOfferService
             'has_offer' => true,
             'offer' => $offer,
             'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, $guid),
+            'offer_slug' => trim((string) ($offer['slug'] ?? '')),
         ], $pricing);
     }
 
@@ -910,6 +912,7 @@ final class SpecialOfferService
                 'offer' => $offer,
                 'has_offer' => true,
                 'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, $guid),
+                'offer_slug' => trim((string) ($offer['slug'] ?? '')),
             ], $overlay);
         }
 
@@ -963,6 +966,7 @@ final class SpecialOfferService
                 'has_offer' => true,
                 'offer' => $best,
                 'offer_badge' => trim((string) ($best['badge_text_ar'] ?? '')) ?: self::defaultBadge($best, $guid),
+                'offer_slug' => trim((string) ($best['slug'] ?? '')),
             ], self::computePricing($product, $best));
         }
 
@@ -986,11 +990,37 @@ final class SpecialOfferService
             ];
         }
 
+        if ($offer === null) {
+            $offer = self::resolveForMaterial($materialGuid);
+        }
+
         if ($offer !== null) {
             $min = isset($offer['min_packages']) && is_numeric((string) $offer['min_packages'])
                 ? (float) $offer['min_packages'] : null;
             $max = isset($offer['max_packages']) && is_numeric((string) $offer['max_packages'])
                 ? (float) $offer['max_packages'] : null;
+            $materialForQty = null;
+            $guidLower = strtolower(trim($materialGuid));
+            $qtyOverride = is_array($offer['product_overrides'][$guidLower] ?? null)
+                ? $offer['product_overrides'][$guidLower]
+                : [];
+            if (trim((string) ($qtyOverride['qty_mode'] ?? '')) === 'stock') {
+                try {
+                    $fetched = MaterialBatchService::fetchByGuids([$guidLower], 12);
+                    foreach ($fetched as $payload) {
+                        if (is_array($payload)) {
+                            $materialForQty = $payload;
+                            break;
+                        }
+                    }
+                } catch (\Throwable) {
+                    $materialForQty = null;
+                }
+            }
+            $remaining = self::remainingOfferPackages($offer, $materialGuid, $materialForQty);
+            if ($remaining !== null) {
+                $max = $max === null ? $remaining : min($max, $remaining);
+            }
             if ($min !== null && $quantity < $min) {
                 return [
                     'ok' => false,
@@ -999,9 +1029,13 @@ final class SpecialOfferService
                 ];
             }
             if ($max !== null && $quantity > $max) {
+                $msg = $remaining !== null && $max === $remaining
+                    ? 'لم يتبقَّ من كمية هذا العرض سوى ' . self::formatQty($max) . ' طرد.'
+                    : 'الحد الأقصى لهذا العرض هو ' . self::formatQty($max) . ' طرد.';
+
                 return [
                     'ok' => false,
-                    'message' => 'الحد الأقصى لهذا العرض هو ' . self::formatQty($max) . ' طرد.',
+                    'message' => $msg,
                     'quantity' => $max,
                 ];
             }
@@ -1192,6 +1226,7 @@ final class SpecialOfferService
         $line['offer_badge'] = trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, (string) ($line['material_guid'] ?? ''));
         $line['has_offer'] = true;
         $line['offer_title_ar'] = trim((string) ($offer['title_ar'] ?? ''));
+        $line['offer_slug'] = trim((string) ($offer['slug'] ?? ''));
 
         return ShareCartService::normalizeLine($line);
     }
@@ -1263,18 +1298,153 @@ final class SpecialOfferService
     /** @param array<string, mixed> $offer */
     public static function offerIncludesMaterial(array $offer, string $guid, array $material): bool
     {
+        $guidLower = strtolower(trim($guid));
         if ((string) ($offer['selection_mode'] ?? '') === 'manual') {
-            $guidLower = strtolower($guid);
+            $listed = false;
             foreach ($offer['material_guids'] ?? [] as $offerGuid) {
                 if (strtolower(trim((string) $offerGuid)) === $guidLower) {
-                    return true;
+                    $listed = true;
+                    break;
                 }
             }
-
+            if (!$listed) {
+                return false;
+            }
+        } elseif (!self::materialMatchesRules($material, is_array($offer['filter_rules'] ?? null) ? $offer['filter_rules'] : [])) {
             return false;
         }
 
-        return self::materialMatchesRules($material, is_array($offer['filter_rules'] ?? null) ? $offer['filter_rules'] : []);
+        $override = is_array($offer['product_overrides'][$guidLower] ?? null)
+            ? $offer['product_overrides'][$guidLower]
+            : [];
+        if (!empty($override['is_exhausted'])) {
+            return false;
+        }
+        $remaining = self::remainingOfferPackages($offer, $guidLower, $material);
+        if ($remaining !== null && $remaining <= 0.0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Remaining packages that can still be sold under this offer for a material.
+     * null = unlimited.
+     *
+     * @param array<string, mixed> $offer
+     * @param array<string, mixed>|null $material
+     */
+    public static function remainingOfferPackages(array $offer, string $materialGuid, ?array $material = null): ?float
+    {
+        $materialGuid = strtolower(trim($materialGuid));
+        if ($materialGuid === '') {
+            return null;
+        }
+        $override = is_array($offer['product_overrides'][$materialGuid] ?? null)
+            ? $offer['product_overrides'][$materialGuid]
+            : (is_array($offer['product_overrides'][strtolower($materialGuid)] ?? null)
+                ? $offer['product_overrides'][strtolower($materialGuid)]
+                : []);
+        $mode = trim((string) ($override['qty_mode'] ?? 'unlimited'));
+        if (!in_array($mode, ['stock', 'fixed'], true)) {
+            return null;
+        }
+
+        if ($mode === 'fixed') {
+            $cap = isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])
+                ? max(0.0, (float) $override['qty_cap_packages'])
+                : 0.0;
+            $offerId = trim((string) ($offer['id'] ?? ''));
+            $sold = $offerId !== '' ? SpecialOfferAnalyticsService::soldPackages($offerId, $materialGuid) : 0.0;
+
+            return max(0.0, round($cap - $sold, 4));
+        }
+
+        // stock: current warehouse packages.
+        if ($material === null) {
+            return null;
+        }
+        $packaging = max(0.0001, ShareCartService::packaging($material));
+        $warehouse = 0.0;
+        foreach (['warehouseQuantity', 'WarehouseQuantity', 'warehouse_quantity', 'stagnantRemainingQty'] as $key) {
+            if (isset($material[$key]) && is_numeric((string) $material[$key])) {
+                $warehouse = max(0.0, (float) $material[$key]);
+                break;
+            }
+        }
+
+        return max(0.0, round($warehouse / $packaging, 4));
+    }
+
+    /** Mark products exhausted when remaining qty hits zero (fixed/stock modes). */
+    public static function refreshExhaustedFlags(string $offerId): void
+    {
+        $offerId = trim($offerId);
+        if ($offerId === '' || !self::hasProductQtyColumns()) {
+            return;
+        }
+        $offer = self::getById($offerId);
+        if ($offer === null) {
+            return;
+        }
+        $pdo = Database::pdo();
+        $mark = $pdo->prepare(
+            'UPDATE special_offer_products
+             SET is_exhausted = :ex, exhausted_at = CASE WHEN :ex2 THEN COALESCE(exhausted_at, NOW()) ELSE NULL END
+             WHERE offer_id = :offer_id AND lower(material_guid::text) = :guid'
+        );
+        foreach ($offer['material_guids'] ?? [] as $guid) {
+            $guid = strtolower(trim((string) $guid));
+            if ($guid === '') {
+                continue;
+            }
+            $override = is_array($offer['product_overrides'][$guid] ?? null) ? $offer['product_overrides'][$guid] : [];
+            $mode = trim((string) ($override['qty_mode'] ?? 'unlimited'));
+            if (!in_array($mode, ['stock', 'fixed'], true)) {
+                $mark->execute(['ex' => 'false', 'ex2' => 'false', 'offer_id' => $offerId, 'guid' => $guid]);
+                continue;
+            }
+            $material = [];
+            if ($mode === 'stock') {
+                try {
+                    $fetched = MaterialBatchService::fetchByGuids([$guid], 12);
+                    foreach ($fetched as $payload) {
+                        if (is_array($payload)) {
+                            $material = $payload;
+                            break;
+                        }
+                    }
+                } catch (\Throwable) {
+                    $material = [];
+                }
+            }
+            $remaining = self::remainingOfferPackages($offer, $guid, $material);
+            $exhausted = $remaining !== null && $remaining <= 0.0;
+            $mark->execute([
+                'ex' => $exhausted ? 'true' : 'false',
+                'ex2' => $exhausted ? 'true' : 'false',
+                'offer_id' => $offerId,
+                'guid' => $guid,
+            ]);
+        }
+    }
+
+    /** Whether migration 031 qty columns exist. */
+    private static function hasProductQtyColumns(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            Database::pdo()->query('SELECT qty_mode, qty_cap_packages, is_exhausted FROM special_offer_products LIMIT 0');
+            $cached = true;
+        } catch (\Throwable) {
+            $cached = false;
+        }
+
+        return $cached;
     }
 
     /** @param array<string, mixed> $rules */
@@ -1692,6 +1862,38 @@ final class SpecialOfferService
             }
             $pdo->prepare($sql)->execute($params);
         }
+
+        if (self::hasProductQtyColumns()) {
+            $qtyStmt = $pdo->prepare(
+                'UPDATE special_offer_products
+                 SET qty_mode = :qty_mode,
+                     qty_cap_packages = :qty_cap,
+                     is_exhausted = FALSE,
+                     exhausted_at = NULL
+                 WHERE offer_id = :offer_id AND lower(material_guid::text) = :guid'
+            );
+            foreach (self::stringList($guids) as $guid) {
+                $guid = strtolower(trim($guid));
+                if ($guid === '') {
+                    continue;
+                }
+                $override = $normalizedOverrides[$guid] ?? [];
+                $mode = trim((string) ($override['qty_mode'] ?? 'unlimited'));
+                if (!in_array($mode, ['unlimited', 'stock', 'fixed'], true)) {
+                    $mode = 'unlimited';
+                }
+                $cap = $mode === 'fixed'
+                    ? self::toNullableFloat((string) ($override['qty_cap_packages'] ?? ''))
+                    : null;
+                $qtyStmt->execute([
+                    'qty_mode' => $mode,
+                    'qty_cap' => $cap,
+                    'offer_id' => $offerId,
+                    'guid' => $guid,
+                ]);
+            }
+            self::refreshExhaustedFlags($offerId);
+        }
     }
 
     /** @return list<array{filter_type: string, value_ar: string}> */
@@ -1789,11 +1991,16 @@ final class SpecialOfferService
             $params[$key] = $offerId;
         }
 
+        $qtyCols = self::hasProductQtyColumns()
+            ? ', qty_mode, qty_cap_packages, CASE WHEN is_exhausted THEN 1 ELSE 0 END AS is_exhausted'
+            : '';
+
         if (self::hasExtendedOfferPricingColumns()) {
             $stmt = Database::pdo()->prepare(
                 'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
                         discount_type::text AS discount_type, discount_percent,
                         fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd
+                        ' . $qtyCols . '
                  FROM special_offer_products
                  WHERE offer_id IN (' . implode(', ', $placeholders) . ')
                  ORDER BY offer_id, sort_order ASC'
@@ -1803,6 +2010,7 @@ final class SpecialOfferService
                 'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
                         discount_type::text AS discount_type, discount_percent,
                         fixed_price_syp, fixed_price_usd
+                        ' . $qtyCols . '
                  FROM special_offer_products
                  WHERE offer_id IN (' . implode(', ', $placeholders) . ')
                  ORDER BY offer_id, sort_order ASC'
@@ -1819,16 +2027,20 @@ final class SpecialOfferService
             }
             $grouped[$offerId]['guids'][] = $guid;
             $type = trim((string) ($row['discount_type'] ?? ''));
+            $override = [
+                'qty_mode' => (string) ($row['qty_mode'] ?? 'unlimited'),
+                'qty_cap_packages' => $row['qty_cap_packages'] ?? null,
+                'is_exhausted' => !empty($row['is_exhausted']),
+            ];
             if ($type !== '') {
-                $grouped[$offerId]['overrides'][$guid] = [
-                    'discount_type' => $type,
-                    'discount_percent' => $row['discount_percent'] ?? null,
-                    'fixed_price_syp' => $row['fixed_price_syp'] ?? null,
-                    'fixed_price_usd' => $row['fixed_price_usd'] ?? null,
-                    'fixed_amount_syp' => $row['fixed_amount_syp'] ?? null,
-                    'fixed_amount_usd' => $row['fixed_amount_usd'] ?? null,
-                ];
+                $override['discount_type'] = $type;
+                $override['discount_percent'] = $row['discount_percent'] ?? null;
+                $override['fixed_price_syp'] = $row['fixed_price_syp'] ?? null;
+                $override['fixed_price_usd'] = $row['fixed_price_usd'] ?? null;
+                $override['fixed_amount_syp'] = $row['fixed_amount_syp'] ?? null;
+                $override['fixed_amount_usd'] = $row['fixed_amount_usd'] ?? null;
             }
+            $grouped[$offerId]['overrides'][$guid] = $override;
         }
 
         return $grouped;

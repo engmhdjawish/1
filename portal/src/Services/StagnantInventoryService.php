@@ -157,6 +157,8 @@ final class StagnantInventoryService
             $overrides[$guid] = [
                 'discount_type' => 'percent',
                 'discount_percent' => $pct,
+                // Exit the offer when warehouse stock for the material is gone.
+                'qty_mode' => 'stock',
             ];
         }
 
