@@ -120,7 +120,8 @@ final class StagnantInventoryService
      *
      * @param list<string> $materialGuids
      * @param array<string, float|int|string> $perMaterialPercents guid => percent
-     * @param array<string, float|int|string> $perMaterialPackages guid => packages (كمية column snapshot)
+     * @param array<string, float|int|string> $perMaterialWarehouseQty guid => primary units from stagnant «كمية»
+     *        (pairs/units — NOT packages). Converted via packaging to qty_cap_packages.
      * @return array{ok: bool, message: string, id?: string|null}
      */
     public static function createOfferFromSelection(
@@ -130,7 +131,7 @@ final class StagnantInventoryService
         string $titleAr,
         ?string $userId,
         bool $asDraft = true,
-        array $perMaterialPackages = []
+        array $perMaterialWarehouseQty = []
     ): array {
         $guids = [];
         foreach ($materialGuids as $guid) {
@@ -149,35 +150,27 @@ final class StagnantInventoryService
             $title = 'عرض تصريف راكد ' . date('Y-m-d');
         }
 
-        // Prefer packages posted from the stagnant «كمية» column; fall back to API warehouse/packaging.
-        $postedPackages = [];
-        foreach ($perMaterialPackages as $key => $rawQty) {
+        // Stagnant «كمية» is warehouse primary units (pairs), same as RemainingQuantity / warehouseQuantity.
+        // qty_cap_packages must be packages (طرود) = units / packaging — never store units as the cap.
+        $postedWarehouseUnits = [];
+        foreach ($perMaterialWarehouseQty as $key => $rawQty) {
             $key = strtolower(trim((string) $key));
             if ($key === '' || !is_numeric($rawQty)) {
                 continue;
             }
-            $postedPackages[$key] = max(0.0, round((float) $rawQty, 4));
+            $postedWarehouseUnits[$key] = max(0.0, round((float) $rawQty, 4));
         }
 
         $materialsByGuid = [];
-        $needsApi = false;
-        foreach ($guids as $guid) {
-            if (!array_key_exists($guid, $postedPackages)) {
-                $needsApi = true;
-                break;
-            }
-        }
-        if ($needsApi) {
-            try {
-                $fetched = MaterialBatchService::fetchByGuids($guids, 45);
-                foreach ($fetched as $key => $payload) {
-                    if (is_array($payload)) {
-                        $materialsByGuid[strtolower(trim((string) $key))] = $payload;
-                    }
+        try {
+            $fetched = MaterialBatchService::fetchByGuids($guids, 45);
+            foreach ($fetched as $key => $payload) {
+                if (is_array($payload)) {
+                    $materialsByGuid[strtolower(trim((string) $key))] = $payload;
                 }
-            } catch (\Throwable) {
-                $materialsByGuid = [];
             }
+        } catch (\Throwable) {
+            $materialsByGuid = [];
         }
 
         $overrides = [];
@@ -187,18 +180,21 @@ final class StagnantInventoryService
                 ?? $defaultPercent;
             $pct = is_numeric($raw) ? (float) $raw : $defaultPercent;
             $pct = max(0.01, min(95.0, $pct));
-            $packages = $postedPackages[$guid] ?? null;
-            if ($packages === null) {
-                $material = $materialsByGuid[strtolower($guid)] ?? null;
-                $packages = is_array($material)
-                    ? self::packagesFromMaterial($material)
-                    : null;
+            $material = $materialsByGuid[strtolower($guid)] ?? [];
+            if (!is_array($material)) {
+                $material = [];
             }
+            // Prefer the stagnant «كمية» the admin saw (primary units), ÷ packaging → طرود.
+            // Fall back to API warehouseQuantity when the tray snapshot is missing.
+            if (array_key_exists($guid, $postedWarehouseUnits)) {
+                $material['warehouseQuantity'] = $postedWarehouseUnits[$guid];
+            }
+            $packages = self::packagesFromMaterial($material);
             $overrides[$guid] = [
                 'discount_type' => 'percent',
                 'discount_percent' => $pct,
                 'qty_mode' => 'fixed',
-                'qty_cap_packages' => $packages !== null ? $packages : 0,
+                'qty_cap_packages' => $packages,
             ];
         }
 
@@ -327,7 +323,7 @@ final class StagnantInventoryService
     }
 
     /**
-     * Current sellable packages from an API material payload (warehouse qty / packaging).
+     * Current sellable packages from an API material payload (warehouse primary units / packaging).
      *
      * @param array<string, mixed> $material
      */

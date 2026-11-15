@@ -6,7 +6,7 @@
   const BOUND = 'data-stagnant-bound';
   const TRAY_SAVED_SESSION_KEY = 'portal.stagnant-offer-saved';
   const TRAY_CANDIDATES_SESSION_KEY = 'portal.stagnant-offer-candidates';
-  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, packages:number|null}>} */
+  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, warehouseQty:number|null}>} */
   const candidates = new Map();
   /** Insertion order for tray rows — always append new candidates at the end. */
   /** @type {string[]} */
@@ -101,7 +101,10 @@
           rate: typeof item.rate === 'number' ? item.rate : 0,
           percent: typeof item.percent === 'number' ? item.percent : 15,
           priceUsd: typeof item.priceUsd === 'number' ? item.priceUsd : null,
-          packages: typeof item.packages === 'number' ? item.packages : null,
+          // «كمية» is warehouse primary units (pairs); server converts to packages.
+          warehouseQty: typeof item.warehouseQty === 'number'
+            ? item.warehouseQty
+            : (typeof item.packages === 'number' ? item.packages : null),
         });
       });
       data.order.forEach((guid) => {
@@ -518,7 +521,8 @@
     return { percent, priceUsd };
   }
 
-  function rowPackages(row) {
+  /** Warehouse primary units from stagnant «كمية» (pairs/units — not packages/طرود). */
+  function rowWarehouseQty(row) {
     const raw = parseLoose(row.getAttribute('data-qty'));
     if (raw === null || raw < 0) return null;
     return Math.round(raw * 10000) / 10000;
@@ -544,7 +548,7 @@
       rate: rowRate(row),
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
-      packages: rowPackages(row),
+      warehouseQty: rowWarehouseQty(row),
     });
     candidateOrder.push(guid);
 
@@ -777,12 +781,12 @@
     guidHidden.name = 'material_guids[]';
     guidHidden.value = item.guid;
 
-    // Snapshot of «كمية» packages so create_offer can persist qty_mode=fixed.
+    // Snapshot of stagnant «كمية» (warehouse primary units). Server ÷ packaging → qty_cap_packages.
     const qtyHidden = document.createElement('input');
     qtyHidden.type = 'hidden';
-    qtyHidden.name = 'material_qty_packages[' + item.guid + ']';
-    qtyHidden.value = item.packages !== null && item.packages !== undefined
-      ? String(item.packages)
+    qtyHidden.name = 'material_warehouse_qty[' + item.guid + ']';
+    qtyHidden.value = item.warehouseQty !== null && item.warehouseQty !== undefined
+      ? String(item.warehouseQty)
       : '';
 
     const removeBtn = document.createElement('button');

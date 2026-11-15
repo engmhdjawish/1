@@ -15,13 +15,11 @@ use Portal\Support\PriceFx;
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $dbError */
-/** @var array<string, array<string, mixed>> $offerAnalyticsById */
 /** @var array{summary?: array<string, mixed>, materials?: list<array<string, mixed>>}|null $editOfferAnalytics */
 
 require __DIR__ . '/partials/token-picker.php';
 require __DIR__ . '/partials/media-picker.php';
 
-$offerAnalyticsById = is_array($offerAnalyticsById ?? null) ? $offerAnalyticsById : [];
 $editOfferAnalytics = is_array($editOfferAnalytics ?? null) ? $editOfferAnalytics : null;
 $fmtInt = static fn ($n): string => number_format((float) $n, 0);
 $fmtMoneyAr = static fn ($n, int $d = 0): string => number_format((float) $n, $d, '.', ',');
@@ -835,7 +833,6 @@ foreach ($offers as $row) {
             <th class="px-4 py-3 text-right font-bold">الحسم</th>
             <th class="px-4 py-3 text-right font-bold">الوضع</th>
             <th class="px-4 py-3 text-right font-bold">يدوي</th>
-            <th class="px-4 py-3 text-right font-bold">جدوى</th>
             <th class="px-4 py-3 text-right font-bold">الفترة</th>
             <th class="px-4 py-3 text-right font-bold">الحالة</th>
             <th class="px-4 py-3 text-left font-bold">إجراءات</th>
@@ -845,7 +842,6 @@ foreach ($offers as $row) {
           <?php foreach ($visibleOffers as $row): ?>
             <?php
               $lifecycle = (string) ($row['_lifecycle'] ?? 'paused');
-              $rowAn = $offerAnalyticsById[(string) ($row['id'] ?? '')] ?? null;
             ?>
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-3">
@@ -865,15 +861,6 @@ foreach ($offers as $row) {
               </td>
               <td class="px-4 py-3 text-xs"><?= ($row['selection_mode'] ?? '') === 'manual' ? 'يدوي' : 'فلترة' ?></td>
               <td class="px-4 py-3"><?= (int) ($row['products_count'] ?? 0) ?></td>
-              <td class="px-4 py-3 text-xs">
-                <?php if (is_array($rowAn)): ?>
-                  <div class="font-bold tabular-nums"><?= h($fmtInt($rowAn['orders'] ?? 0)) ?> طلب</div>
-                  <div class="text-text-muted tabular-nums"><?= h($fmtMoneyAr($rowAn['revenue_syp'] ?? 0, 0)) ?> ل.س</div>
-                  <div class="text-[10px] text-text-muted tabular-nums"><?= h($fmtInt($rowAn['page_views'] ?? 0)) ?> مشاهدة · <?= h($fmtInt($rowAn['add_to_cart'] ?? 0)) ?> سلة</div>
-                <?php else: ?>
-                  <span class="text-text-muted">—</span>
-                <?php endif; ?>
-              </td>
               <td class="px-4 py-3 text-xs whitespace-nowrap">
                 <?= h(substr((string) ($row['starts_at'] ?? ''), 0, 10)) ?> — <?= !empty($row['ends_at']) ? h(substr((string) $row['ends_at'], 0, 10)) : '∞' ?>
               </td>

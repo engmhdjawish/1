@@ -107,14 +107,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         $perMaterialPercents[$guid] = (float) $pct;
     }
-    $rawPackages = is_array($_POST['material_qty_packages'] ?? null) ? $_POST['material_qty_packages'] : [];
-    $perMaterialPackages = [];
-    foreach ($rawPackages as $guid => $qty) {
+    // Stagnant «كمية» / data-qty is warehouse primary units (pairs), not packages (طرود).
+    // Accept both field names for compatibility with older tray markup.
+    $rawWarehouseQty = is_array($_POST['material_warehouse_qty'] ?? null)
+        ? $_POST['material_warehouse_qty']
+        : (is_array($_POST['material_qty_packages'] ?? null) ? $_POST['material_qty_packages'] : []);
+    $perMaterialWarehouseQty = [];
+    foreach ($rawWarehouseQty as $guid => $qty) {
         $guid = strtolower(trim((string) $guid));
         if ($guid === '' || !is_numeric($qty)) {
             continue;
         }
-        $perMaterialPackages[$guid] = (float) $qty;
+        $perMaterialWarehouseQty[$guid] = (float) $qty;
     }
     try {
         $result = StagnantInventoryService::createOfferFromSelection(
@@ -124,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $titleAr,
             $userId,
             $asDraft,
-            $perMaterialPackages
+            $perMaterialWarehouseQty
         );
     } catch (\Throwable $e) {
         $result = [

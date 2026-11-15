@@ -13,7 +13,11 @@ use PDO;
 final class SpecialOfferAnalyticsService
 {
     /**
+     * Bulk sales summaries (one GROUP BY). Engagement against visitor_logs is opt-in
+     * because ILIKE scans are expensive — use only when editing a single offer.
+     *
      * @param list<string> $offerIds
+     * @param array{include_engagement?: bool} $options
      * @return array<string, array{
      *   orders: int,
      *   lines: int,
@@ -27,8 +31,9 @@ final class SpecialOfferAnalyticsService
      *   page_views: int
      * }>
      */
-    public static function summariesForOffers(array $offerIds): array
+    public static function summariesForOffers(array $offerIds, array $options = []): array
     {
+        $includeEngagement = !empty($options['include_engagement']);
         $offerIds = array_values(array_unique(array_filter(
             array_map(static fn ($id): string => trim((string) $id), $offerIds),
             static fn (string $id): bool => $id !== ''
@@ -100,7 +105,11 @@ final class SpecialOfferAnalyticsService
             // Missing special_offer_id / original_sale_price_* columns — keep zero sales.
         }
 
-        // Engagement: visitor_logs whose details JSON mentions offer slug/id (best-effort).
+        if (!$includeEngagement) {
+            return $out;
+        }
+
+        // Engagement: one visitor_logs scan per offer (ILIKE) — keep for single-offer edit only.
         $slugById = [];
         try {
             $slugs = Database::pdo()->prepare(
@@ -156,7 +165,7 @@ final class SpecialOfferAnalyticsService
     public static function detailForOffer(string $offerId): array
     {
         $offerId = trim($offerId);
-        $summaries = self::summariesForOffers([$offerId]);
+        $summaries = self::summariesForOffers([$offerId], ['include_engagement' => true]);
         $summary = $summaries[$offerId] ?? [
             'orders' => 0,
             'lines' => 0,

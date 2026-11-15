@@ -201,10 +201,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $dbError = null;
 $stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
 $offers = [];
-$offerAnalyticsById = [];
 $editOfferAnalytics = null;
 try {
     $stats = SpecialOfferService::stats();
+    // adminList is counts-only (no preview products / API material batch).
     $offers = SpecialOfferService::adminList();
 } catch (\Throwable $e) {
     $offers = [];
@@ -219,15 +219,8 @@ try {
         : ('تعذر تحميل العروض: ' . $errMsg);
 }
 
-// Analytics is best-effort: never blank the list or show the offers-migration banner.
-if ($dbError === null) {
-    try {
-        $offerIds = array_map(static fn ($row): string => (string) ($row['id'] ?? ''), $offers);
-        $offerAnalyticsById = SpecialOfferAnalyticsService::summariesForOffers($offerIds);
-    } catch (\Throwable) {
-        $offerAnalyticsById = [];
-    }
-}
+// Do NOT load per-offer analytics on the list page — visitor_logs engagement was N+1
+// and blocked /dashboard/special-offers.php with ~10 offers. Metrics load on edit only.
 
 $editOffer = null;
 $includeOfferPreview = (($_GET['preview'] ?? '') === '1');
