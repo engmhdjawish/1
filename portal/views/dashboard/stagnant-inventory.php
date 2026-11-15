@@ -507,7 +507,11 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
                       >
                         <span class="stagnant-offer-chip__title"><?= h($offerTitle) ?></span>
                         <span class="stagnant-offer-chip__meta">
-                          <?= $offerStatus === 'active' ? 'نشط' : 'مسودة' ?>
+                          <?= match ($offerStatus) {
+                              'active' => 'نشط',
+                              'ended' => 'منتهٍ',
+                              default => 'مسودة',
+                          } ?>
                           <?php if ($discountLabel !== ''): ?> · <?= h($discountLabel) ?><?php endif; ?>
                         </span>
                       </a>
