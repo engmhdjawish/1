@@ -1006,6 +1006,14 @@ final class StoreCatalogService
 
         $search = trim((string) ($requestFilters['search'] ?? ''));
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
+        $materialTypes = self::parseList($requestFilters['materialTypes'] ?? []);
+        $manufacturers = self::parseList($requestFilters['manufacturers'] ?? []);
+        $ageCategories = self::parseList($requestFilters['ageCategories'] ?? []);
+        $sizeRanges = self::parseList($requestFilters['sizeRanges'] ?? []);
+        $countryOfOrigins = self::parseList($requestFilters['countryOfOrigins'] ?? []);
+        $groupGuids = self::parseList($requestFilters['groupGuids'] ?? []);
+        $hasImage = array_key_exists('hasImage', $requestFilters) ? $requestFilters['hasImage'] : null;
+        $requestedAvailability = array_key_exists('isAvailable', $requestFilters) ? $requestFilters['isAvailable'] : null;
 
         $materialsByGuid = MaterialBatchService::fetchByGuids(
             $guids,
@@ -1015,22 +1023,11 @@ final class StoreCatalogService
         $products = [];
         foreach ($guids as $guid) {
             $material = $materialsByGuid[$guid] ?? null;
-            if (!is_array($material)) {
-                continue;
+            if (is_array($material)) {
+                $products[] = $material;
             }
-            if ($search !== '') {
-                $hay = strtolower(
-                    trim((string) ($material['name'] ?? '')) . ' '
-                    . trim((string) ($material['materialCode'] ?? ''))
-                );
-                if (!str_contains($hay, strtolower($search))) {
-                    continue;
-                }
-            }
-            $products[] = $material;
         }
 
-        $requestedAvailability = array_key_exists('isAvailable', $requestFilters) ? $requestFilters['isAvailable'] : null;
         $policy = self::activePolicy();
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
         if (self::labSkipsSellableStock(is_bool($requestedAvailability) ? $requestedAvailability : null)) {
@@ -1049,20 +1046,37 @@ final class StoreCatalogService
             $sectionContext,
             []
         );
-        if ($search !== '') {
-            $needle = strtolower($search);
+
+        // Facet options for this offer/section must come from its product set, not the full catalog.
+        $filterOptions = self::buildFilterOptionsFromProducts($products);
+        $resultFilters = self::buildResultFiltersFromProducts($products);
+
+        $facetRules = [
+            'keyword' => $search,
+            'material_types' => $materialTypes,
+            'age_categories' => $ageCategories,
+            'manufacturers' => $manufacturers,
+            'size_ranges' => $sizeRanges,
+            'country_origins' => $countryOfOrigins,
+            'group_guids' => $groupGuids,
+            'is_available' => null,
+            'has_image' => is_bool($hasImage) ? $hasImage : null,
+        ];
+        if ($facetRules['keyword'] !== ''
+            || $materialTypes !== []
+            || $ageCategories !== []
+            || $manufacturers !== []
+            || $sizeRanges !== []
+            || $countryOfOrigins !== []
+            || $groupGuids !== []
+            || is_bool($hasImage)
+        ) {
             $products = array_values(array_filter(
                 $products,
-                static function (array $product) use ($needle): bool {
-                    $hay = strtolower(
-                        trim((string) ($product['name'] ?? '')) . ' '
-                        . trim((string) ($product['materialCode'] ?? $product['code'] ?? ''))
-                    );
-
-                    return str_contains($hay, $needle);
-                }
+                static fn (array $product): bool => SpecialOfferService::materialMatchesRules($product, $facetRules)
             ));
         }
+
         $products = self::sortProducts($products, $sort);
         if (self::$labMixedCatalog) {
             $products = self::orderUnavailableLast($products);
@@ -1071,20 +1085,12 @@ final class StoreCatalogService
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         $page = min(max(1, $page), $totalPages);
         $offset = ($page - 1) * $pageSize;
-        $products = array_slice($products, $offset, $pageSize);
+        // Price only the visible page — manual offers can be hundreds of GUIDs.
+        $pageProducts = array_slice($products, $offset, $pageSize);
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
-        $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
-        $policy = self::activePolicy();
-        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
-        $baseRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
-        $filterOptions = self::getCachedFilterOptions();
-        $resultFilters = self::scopeResultFiltersForPolicy(
-            self::buildResultFiltersFromFilterOptions($filterOptions),
-            $baseRules
-        );
 
         return [
-            'products' => self::withOfferPricing($products, $contextOfferSlug),
+            'products' => self::withOfferPricing($pageProducts, $contextOfferSlug),
             'totalCount' => $totalCount,
             'page' => $page,
             'pageSize' => $pageSize,
@@ -1100,18 +1106,151 @@ final class StoreCatalogService
             'filters' => self::buildFiltersState(
                 $search,
                 $sort,
+                $materialTypes,
+                $manufacturers,
+                $ageCategories,
+                $sizeRanges,
+                $countryOfOrigins,
+                $groupGuids,
                 [],
-                [],
-                [],
-                [],
-                [],
-                [],
-                [],
-                null,
-                null,
+                is_bool($requestedAvailability) ? $requestedAvailability : null,
+                is_bool($hasImage) ? $hasImage : null,
                 $sectionContext,
                 $requestFilters
             ),
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>, materialTypes: list<string>, manufacturers: list<string>, ageCategories: list<string>, sizeRanges: list<string>, countryOfOrigins: list<string>}
+     */
+    private static function buildFilterOptionsFromProducts(array $products): array
+    {
+        $collect = static function (string ...$keys) use ($products): array {
+            $seen = [];
+            $values = [];
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $text = '';
+                foreach ($keys as $key) {
+                    $text = trim((string) ($product[$key] ?? ''));
+                    if ($text !== '') {
+                        break;
+                    }
+                }
+                if ($text === '') {
+                    continue;
+                }
+                $norm = function_exists('mb_strtolower') ? mb_strtolower($text) : strtolower($text);
+                if (isset($seen[$norm])) {
+                    continue;
+                }
+                $seen[$norm] = true;
+                $values[] = $text;
+            }
+            natcasesort($values);
+
+            return array_values($values);
+        };
+
+        $groups = [];
+        $groupSeen = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = trim((string) ($product['groupGuid'] ?? $product['GroupGuid'] ?? ''));
+            if ($guid === '' || isset($groupSeen[strtolower($guid)])) {
+                continue;
+            }
+            $groupSeen[strtolower($guid)] = true;
+            $groups[] = [
+                'guid' => $guid,
+                'code' => trim((string) ($product['groupCode'] ?? $product['GroupCode'] ?? '')),
+                'name' => trim((string) ($product['groupName'] ?? $product['GroupName'] ?? '')),
+            ];
+        }
+
+        return [
+            'stores' => [],
+            'groups' => $groups,
+            'materialTypes' => $collect('materialType', 'MaterialType'),
+            'manufacturers' => $collect('manufacturer', 'Manufacturer'),
+            'ageCategories' => $collect('ageCategory', 'AgeCategory'),
+            'sizeRanges' => $collect('sizeRange', 'SizeRange'),
+            'countryOfOrigins' => $collect('countryOfOrigin', 'CountryOfOrigin'),
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private static function buildResultFiltersFromProducts(array $products): array
+    {
+        $countFacet = static function (string ...$keys) use ($products): array {
+            $counts = [];
+            $labels = [];
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $text = '';
+                foreach ($keys as $key) {
+                    $text = trim((string) ($product[$key] ?? ''));
+                    if ($text !== '') {
+                        break;
+                    }
+                }
+                if ($text === '') {
+                    continue;
+                }
+                $norm = function_exists('mb_strtolower') ? mb_strtolower($text) : strtolower($text);
+                $labels[$norm] = $labels[$norm] ?? $text;
+                $counts[$norm] = ($counts[$norm] ?? 0) + 1;
+            }
+            $items = [];
+            foreach ($counts as $norm => $count) {
+                $items[] = ['value' => $labels[$norm], 'count' => $count];
+            }
+            usort($items, static fn (array $a, array $b): int => strnatcasecmp((string) $a['value'], (string) $b['value']));
+
+            return $items;
+        };
+
+        $groups = [];
+        $groupCounts = [];
+        $groupMeta = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = trim((string) ($product['groupGuid'] ?? $product['GroupGuid'] ?? ''));
+            if ($guid === '') {
+                continue;
+            }
+            $key = strtolower($guid);
+            $groupCounts[$key] = ($groupCounts[$key] ?? 0) + 1;
+            $groupMeta[$key] ??= [
+                'guid' => $guid,
+                'code' => trim((string) ($product['groupCode'] ?? $product['GroupCode'] ?? '')),
+                'name' => trim((string) ($product['groupName'] ?? $product['GroupName'] ?? '')),
+            ];
+        }
+        foreach ($groupMeta as $key => $meta) {
+            $groups[] = array_merge($meta, ['count' => $groupCounts[$key]]);
+        }
+
+        return [
+            'materialTypes' => $countFacet('materialType', 'MaterialType'),
+            'ageCategories' => $countFacet('ageCategory', 'AgeCategory'),
+            'manufacturers' => $countFacet('manufacturer', 'Manufacturer'),
+            'sizeRanges' => $countFacet('sizeRange', 'SizeRange'),
+            'countryOfOrigins' => $countFacet('countryOfOrigin', 'CountryOfOrigin'),
+            'groups' => $groups,
         ];
     }
 
@@ -1925,26 +2064,40 @@ final class StoreCatalogService
             static fn (string $guid): bool => $guid !== ''
         )));
         $products = self::fetchUnavailableMaterialsByGuids($guids, $storeGuids);
-        $search = trim((string) ($merged['search'] ?? ''));
-        if ($search !== '') {
-            $needle = HomeSearchService::normalize($search);
-            $products = array_values(array_filter($products, static function (array $product) use ($needle): bool {
-                $hay = HomeSearchService::normalize(
-                    trim((string) ($product['name'] ?? '')) . ' ' . trim((string) ($product['materialCode'] ?? $product['code'] ?? ''))
-                );
-
-                return $needle === '' || str_contains($hay, $needle);
-            }));
+        $facetRules = [
+            'keyword' => trim((string) ($merged['search'] ?? '')),
+            'material_types' => self::parseList($merged['materialTypes'] ?? []),
+            'age_categories' => self::parseList($merged['ageCategories'] ?? []),
+            'manufacturers' => self::parseList($merged['manufacturers'] ?? []),
+            'size_ranges' => self::parseList($merged['sizeRanges'] ?? []),
+            'country_origins' => self::parseList($merged['countryOfOrigins'] ?? []),
+            'group_guids' => self::parseList($merged['groupGuids'] ?? []),
+            'is_available' => null,
+            'has_image' => array_key_exists('hasImage', $merged) ? $merged['hasImage'] : null,
+        ];
+        if ($facetRules['keyword'] !== ''
+            || $facetRules['material_types'] !== []
+            || $facetRules['age_categories'] !== []
+            || $facetRules['manufacturers'] !== []
+            || $facetRules['size_ranges'] !== []
+            || $facetRules['country_origins'] !== []
+            || $facetRules['group_guids'] !== []
+            || is_bool($facetRules['has_image'])
+        ) {
+            $products = array_values(array_filter(
+                $products,
+                static fn (array $product): bool => SpecialOfferService::materialMatchesRules($product, $facetRules)
+            ));
         }
         $products = self::sortProducts($products, $sort);
-        $products = self::withOfferPricing($products, $offerSlug);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         $page = min(max(1, $page), $totalPages);
         $offset = ($page - 1) * $pageSize;
+        $pageProducts = array_slice($products, $offset, $pageSize);
 
         return [
-            'products' => array_slice($products, $offset, $pageSize),
+            'products' => self::withOfferPricing($pageProducts, $offerSlug),
             'totalCount' => $totalCount,
             'page' => $page,
             'pageSize' => $pageSize,

@@ -681,6 +681,11 @@ final class SpecialOfferService
             return null;
         }
 
+        static $memo = [];
+        if (array_key_exists($slug, $memo)) {
+            return $memo[$slug];
+        }
+
         $pricingCols = self::hasExtendedOfferPricingColumns()
             ? 'selection_mode::text AS selection_mode, pricing_scope,
                     discount_type::text AS discount_type,
@@ -704,19 +709,20 @@ final class SpecialOfferService
         $stmt->execute(['slug' => $slug]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row === false) {
-            return null;
+            return $memo[$slug] = null;
         }
 
         $id = (string) $row['id'];
         $parsed = self::parseFilterRows(self::filtersForOffer($id));
         $row['filter_rules'] = $parsed['rules'];
+        $row['display_options'] = $parsed['display_options'];
         $manual = self::batchManualProductRowsForOffers([$id])[$id]
             ?? ['guids' => [], 'overrides' => []];
-        $row['material_guids'] = $manual['guids'];
+        $row['material_guids'] = self::storefrontManualGuids($manual);
         $row['product_overrides'] = $manual['overrides'];
         $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
 
-        return $row;
+        return $memo[$slug] = $row;
     }
 
     /** @return array<string, mixed>|null */
@@ -727,35 +733,54 @@ final class SpecialOfferService
             return null;
         }
 
-        $stmt = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, selection_mode::text AS selection_mode
-             FROM special_offers
-             WHERE slug = :slug
-               AND is_active = TRUE
-               AND starts_at <= NOW()
-               AND (ends_at IS NULL OR ends_at > NOW())
-             LIMIT 1'
-        );
-        $stmt->execute(['slug' => $slug]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row === false) {
+        $offer = self::activeOfferBySlug($slug);
+        if ($offer === null) {
             return null;
         }
 
-        $id = (string) $row['id'];
-        $parsed = self::parseFilterRows(self::filtersForOffer($id));
-
         return [
-            'id' => $id,
-            'slug' => (string) $row['slug'],
-            'title_ar' => (string) $row['title_ar'],
-            'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
-            'selection_mode' => (string) ($row['selection_mode'] ?? 'filter'),
-            'filter_rules' => $parsed['rules'],
-            'display_options' => $parsed['display_options'],
-            'material_guids' => self::manualProducts($id),
+            'id' => (string) $offer['id'],
+            'slug' => (string) $offer['slug'],
+            'title_ar' => (string) $offer['title_ar'],
+            'subtitle_ar' => (string) ($offer['subtitle_ar'] ?? ''),
+            'selection_mode' => (string) ($offer['selection_mode'] ?? 'filter'),
+            'filter_rules' => is_array($offer['filter_rules'] ?? null) ? $offer['filter_rules'] : [],
+            'display_options' => is_array($offer['display_options'] ?? null)
+                ? $offer['display_options']
+                : self::defaultDisplayOptions(),
+            'material_guids' => is_array($offer['material_guids'] ?? null) ? $offer['material_guids'] : [],
+            'product_overrides' => is_array($offer['product_overrides'] ?? null) ? $offer['product_overrides'] : [],
             'is_offer_section' => true,
         ];
+    }
+
+    /**
+     * Storefront GUID list: drop exhausted rows so shop open does not fetch dead stock.
+     *
+     * @param array{guids?: list<string>, overrides?: array<string, array<string, mixed>>} $manual
+     * @return list<string>
+     */
+    private static function storefrontManualGuids(array $manual): array
+    {
+        $guids = is_array($manual['guids'] ?? null) ? $manual['guids'] : [];
+        $overrides = is_array($manual['overrides'] ?? null) ? $manual['overrides'] : [];
+        if ($guids === [] || $overrides === []) {
+            return array_values(array_map('strval', $guids));
+        }
+
+        $kept = [];
+        foreach ($guids as $guid) {
+            $key = strtolower(trim((string) $guid));
+            if ($key === '') {
+                continue;
+            }
+            if (!empty($overrides[$key]['is_exhausted'])) {
+                continue;
+            }
+            $kept[] = (string) $guid;
+        }
+
+        return $kept;
     }
 
     public static function delete(string $id): bool
@@ -1494,8 +1519,8 @@ final class SpecialOfferService
         return self::hasProductQtyColumns(true);
     }
 
-    /** @param array<string, mixed> $rules */
-    private static function materialMatchesRules(array $material, array $rules): bool
+    /** @param array<string, mixed> $material @param array<string, mixed> $rules */
+    public static function materialMatchesRules(array $material, array $rules): bool
     {
         $field = static function (string ...$keys) use ($material): string {
             foreach ($keys as $key) {

@@ -42,12 +42,13 @@ $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
 
-$contextOffer = null;
-if ($productOfferSlug !== null) {
-    $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
-}
 $guid = material_guid($item);
+// Catalog pages already apply offer pricing in batch; skip a per-card DB lookup.
 if ($guid !== '' && empty($item['has_offer'])) {
+    $contextOffer = null;
+    if ($productOfferSlug !== null) {
+        $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
+    }
     $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
     if (!empty($overlay['has_offer'])) {
         $item = array_merge($item, $overlay);
