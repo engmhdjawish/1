@@ -2297,6 +2297,17 @@ button.is-loading[data-loading-label],
   overflow: hidden;
 }
 
+/* Unified (offer-level) discount: list materials + qty, hide per-row pricing columns */
+.so-invoice--unified .so-invoice__type-col,
+.so-invoice--unified .so-invoice__type,
+.so-invoice--unified .so-invoice__price-col,
+.so-invoice--unified .so-invoice__value,
+.so-invoice--unified .so-invoice__after-col,
+.so-invoice--unified .so-invoice__after,
+.so-invoice--unified td[data-after-syp] {
+  display: none;
+}
+
 .so-invoice__head {
   display: flex;
   justify-content: space-between;

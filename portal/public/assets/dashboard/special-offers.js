@@ -75,30 +75,60 @@
       return 0;
     };
 
+    const isManualMode = () => modeSelect?.value === 'manual';
+    const isPerMaterialMode = () => pricingScope?.value === 'per_material' && isManualMode();
+
+    const applyInvoiceChrome = () => {
+      const priced = isPerMaterialMode();
+      perMaterialPanel?.classList.toggle('so-invoice--unified', !priced);
+      const kicker = scope.querySelector('[data-so-invoice-kicker]');
+      const title = scope.querySelector('[data-so-invoice-title]');
+      const hint = scope.querySelector('[data-so-invoice-hint]');
+      if (kicker) kicker.textContent = priced ? 'فاتورة العرض' : 'مواد العرض';
+      if (title) title.textContent = priced ? 'مواد العرض وأسعارها' : 'المواد المشمولة بالعرض';
+      if (hint) {
+        hint.textContent = priced
+          ? 'الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.'
+          : 'أضف مواداً من البحث أعلاه. الحسم الموحّد من أعلى النموذج يُطبَّق على كل المواد — يمكن ضبط كمية العرض لكل مادة.';
+      }
+      // Unified offer: keep discount inputs out of POST (disabled) so only qty caps submit.
+      perMaterialRows?.querySelectorAll('[data-override-guid]').forEach((row) => {
+        row.querySelectorAll('[data-field="discount_type"], [data-field="discount_percent"], [data-field="sale_after_usd"], [data-field="fixed_amount_syp"], [data-field="fixed_amount_usd"], [data-field="fixed_price_syp"], [data-field="fixed_price_usd"]').forEach((el) => {
+          if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
+            el.disabled = !priced;
+            if (el.getAttribute('data-field') === 'discount_percent') {
+              el.toggleAttribute('required', priced);
+            }
+          }
+        });
+      });
+    };
+
     const syncPanels = () => {
       if (pricingScope?.value === 'per_material' && modeSelect && modeSelect.value !== 'manual') {
         modeSelect.value = 'manual';
       }
-      const isManual = modeSelect?.value === 'manual';
+      const isManual = isManualMode();
       if (!isManual && pricingScope?.value === 'per_material') {
         pricingScope.value = 'offer';
       }
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
-      const perMaterial = pricingScope?.value === 'per_material' && isManual;
+      const perMaterial = isPerMaterialMode();
       scope.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
       scope.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
-      // Hide chip picker chrome in invoice mode — table owns the material list.
+      // Always hide chip chrome in manual mode — the materials table is the UI.
       const pickerWrap = scope.querySelector('[data-so-manual-picker-wrap]');
       const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
       if (pickerWrap) {
-        pickerWrap.classList.toggle('hidden', perMaterial);
-        pickerWrap.classList.toggle('so-manual-picker--invoice', perMaterial);
+        pickerWrap.classList.add('hidden', 'so-manual-picker--invoice');
       } else {
-        picker?.classList.toggle('hidden', perMaterial);
+        picker?.classList.add('hidden');
       }
       if (picker) {
-        picker.setAttribute('data-suppress-chips', perMaterial ? '1' : '0');
+        picker.setAttribute('data-suppress-chips', '1');
+        // Clear any chip chrome that painted before suppress was applied.
+        picker.querySelector('[data-role="chips"]')?.replaceChildren();
       }
       scope.querySelectorAll('.so-unified-discount').forEach((el) => {
         if (perMaterial) {
@@ -435,7 +465,7 @@
       tr.appendChild(qtyCell);
 
       const sypCell = document.createElement('td');
-      sypCell.className = 'tabular-nums font-extrabold text-emerald-800';
+      sypCell.className = 'tabular-nums font-extrabold text-emerald-800 so-invoice__after';
       sypCell.dir = 'ltr';
       sypCell.setAttribute('data-after-syp', '');
       sypCell.textContent = '—';
@@ -582,6 +612,7 @@
         // Keep server-rendered rows when GUID sets and prices already match.
         if (sameGuids && !pricesStale) {
           bindInvoiceRowBehaviors(perMaterialRows);
+          applyInvoiceChrome();
           return;
         }
 
@@ -594,6 +625,7 @@
           cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
           empty.appendChild(cell);
           perMaterialRows.appendChild(empty);
+          applyInvoiceChrome();
           return;
         }
         selected.forEach((guid, index) => {
@@ -601,6 +633,7 @@
           const meta = labelMap[key] || { name: key };
           perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
         });
+        applyInvoiceChrome();
       } finally {
         syncRowsBusy = false;
       }
@@ -695,10 +728,12 @@
     };
 
     const syncPricingScope = () => {
-      const isPerMaterial = pricingScope?.value === 'per_material' && modeSelect?.value === 'manual';
-      perMaterialPanel?.classList.toggle('hidden', !isPerMaterial);
-      if (isPerMaterial) {
+      const isManual = isManualMode();
+      perMaterialPanel?.classList.toggle('hidden', !isManual);
+      applyInvoiceChrome();
+      if (isManual) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     };
     pricingScope?.addEventListener('change', () => {
@@ -708,18 +743,19 @@
       syncPanels();
     });
 
-    // Keep per-material rows in sync when token chips change (debounced; ignore self-writes).
+    // Keep table rows in sync when hidden GUID inputs change (debounced; ignore self-writes).
     const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
     const hiddenHost = picker?.querySelector('[data-role="hidden-inputs"]');
     if (hiddenHost && typeof MutationObserver !== 'undefined') {
       let observerTimer = null;
       const observer = new MutationObserver(() => {
-        if (syncRowsBusy || pricingScope?.value !== 'per_material') return;
+        if (syncRowsBusy || !isManualMode()) return;
         if (observerTimer) clearTimeout(observerTimer);
         observerTimer = setTimeout(() => {
           observerTimer = null;
-          if (!syncRowsBusy && pricingScope?.value === 'per_material') {
+          if (!syncRowsBusy && isManualMode()) {
             syncPerMaterialRows();
+            applyInvoiceChrome();
           }
         }, 0);
       });
@@ -729,20 +765,22 @@
     syncPanels();
     syncPricingScope();
     bindInvoiceRowBehaviors(perMaterialRows);
-    // Late pass: token picker may finish painting chips after first sync.
+    // Late pass: token picker may finish seeding hidden inputs after first sync.
     window.setTimeout(() => {
-      if (pricingScope?.value === 'per_material') {
+      if (isManualMode()) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     }, 0);
     window.setTimeout(() => {
-      if (pricingScope?.value === 'per_material') {
+      if (isManualMode()) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     }, 150);
 
     form.addEventListener('submit', (event) => {
-      if (pricingScope?.value !== 'per_material') return;
+      if (!isManualMode()) return;
       const selected = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials')
         : [];
@@ -750,7 +788,11 @@
       if (selected.length > 0 || rowCount > 0) return;
       event.preventDefault();
       const status = scope.querySelector('#so-material-search-status');
-      if (status) status.textContent = 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.';
+      if (status) {
+        status.textContent = isPerMaterialMode()
+          ? 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.'
+          : 'اختر مادة واحدة على الأقل في جدول المواد.';
+      }
     });
 
     const searchInput = scope.querySelector('#so-material-search');
@@ -937,8 +979,9 @@
         };
       }
       const refreshInvoice = () => {
-        if (pricingScope?.value === 'per_material') {
+        if (isManualMode()) {
           syncPerMaterialRows();
+          applyInvoiceChrome();
           perMaterialRows?.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
       };
