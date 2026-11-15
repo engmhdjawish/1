@@ -685,6 +685,8 @@
     siblingSubmits.forEach((btn) => {
       btn.disabled = true;
     });
+    let ajaxOk = false;
+    let ajaxRedirect = null;
     try {
       const body = new FormData(form);
       if (submitter && submitter.name) {
@@ -694,8 +696,10 @@
         method: (form.method || 'POST').toUpperCase(),
         body,
       });
-      showToast(data.message || 'تم التنفيذ.', data.ok === false ? 'error' : 'success');
-      const target = redirect || data.redirect;
+      ajaxOk = data.ok !== false;
+      ajaxRedirect = redirect || data.redirect || null;
+      showToast(data.message || 'تم التنفيذ.', ajaxOk ? 'success' : 'error');
+      const target = ajaxRedirect;
       if (target) {
         await navigate(target);
       } else if (reload || data.reload) {
@@ -716,7 +720,9 @@
           btn.disabled = false;
         }
       });
-      document.dispatchEvent(new CustomEvent('dashboard:ajax-done', { detail: { form } }));
+      document.dispatchEvent(new CustomEvent('dashboard:ajax-done', {
+        detail: { form, ok: ajaxOk, redirect: ajaxRedirect },
+      }));
     }
   }
 

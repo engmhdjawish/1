@@ -289,7 +289,10 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
   <?php endif; ?>
 </div>
 
-<form method="post" action="/dashboard/stagnant-inventory.php" id="stagnant-offer-form" data-dashboard-ajax data-stagnant-offer-form>
+<?php
+  $stagnantTrayCleared = isset($_GET['saved']) && (string) $_GET['saved'] === '1';
+?>
+<form method="post" action="/dashboard/stagnant-inventory.php" id="stagnant-offer-form" data-dashboard-ajax data-stagnant-offer-form<?= $stagnantTrayCleared ? ' data-stagnant-clear-tray="1"' : '' ?>>
   <input type="hidden" name="action" value="create_offer">
   <input type="hidden" name="minAgeDays" value="<?= (int) $minAgeDays ?>">
   <input type="hidden" name="maxAgeDays" value="<?= $maxAgeDays !== null ? (int) $maxAgeDays : '' ?>">

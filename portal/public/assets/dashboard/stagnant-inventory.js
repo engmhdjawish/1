@@ -4,6 +4,7 @@
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
+  const TRAY_SAVED_SESSION_KEY = 'portal.stagnant-offer-saved';
   /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, packages:number|null}>} */
   const candidates = new Map();
   /** Insertion order for tray rows — always append new candidates at the end. */
@@ -12,6 +13,66 @@
   let activeRow = null;
   let syncingPreview = false;
   let savingOffer = false;
+
+  function markOfferSavedForLaterVisit() {
+    try {
+      sessionStorage.setItem(TRAY_SAVED_SESSION_KEY, '1');
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function consumeSavedTrayFlag() {
+    try {
+      if (sessionStorage.getItem(TRAY_SAVED_SESSION_KEY) === '1') {
+        sessionStorage.removeItem(TRAY_SAVED_SESSION_KEY);
+        return true;
+      }
+    } catch (_) {
+      /* storage blocked */
+    }
+    return false;
+  }
+
+  function shouldClearTrayOnEntry(root = document) {
+    if (consumeSavedTrayFlag()) {
+      return true;
+    }
+    const form = root.querySelector?.('#stagnant-offer-form')
+      || (root instanceof Document ? root.getElementById('stagnant-offer-form') : null)
+      || document.getElementById('stagnant-offer-form');
+    if (form?.getAttribute('data-stagnant-clear-tray') === '1') {
+      return true;
+    }
+    if (typeof window !== 'undefined' && window.location.search.includes('saved=1')) {
+      return true;
+    }
+    return false;
+  }
+
+  function restoreHiddenMaterialRows(root = document) {
+    const scope = root instanceof Document ? root : root.ownerDocument || document;
+    scope.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      if (row instanceof HTMLElement && (row.hidden || row.classList.contains('is-in-tray'))) {
+        markRowInTray(row, false);
+      }
+    });
+  }
+
+  function clearAllCandidates(root = document) {
+    candidateOrder.length = 0;
+    candidates.clear();
+    restoreHiddenMaterialRows(root);
+    renderTray();
+    syncSubmitState(root);
+    updateNavControls();
+  }
+
+  function resetSavingUi(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    savingOffer = false;
+    setSavingState(form, false, null);
+  }
 
   function roundUpTo5(amount) {
     if (!(amount > 0)) return 0;
@@ -757,14 +818,32 @@
     }
   }
 
+  /** Drop stale in-memory tray state when the server just sent a fresh form (SPA navigation). */
+  function resetModuleTrayForFreshDom(root = document) {
+    candidateOrder.length = 0;
+    candidates.clear();
+    restoreHiddenMaterialRows(root);
+    renderTray();
+    syncSubmitState(root);
+  }
+
   function init(root = document) {
     const form = root.querySelector?.('#stagnant-offer-form') || document.getElementById('stagnant-offer-form');
     if (!form) return;
     if (form.getAttribute(BOUND) === '1') {
-      syncSubmitState(document);
+      if (shouldClearTrayOnEntry(root)) {
+        clearAllCandidates(root);
+      }
+      resetSavingUi(form);
+      syncSubmitState(root);
       return;
     }
     form.setAttribute(BOUND, '1');
+    resetModuleTrayForFreshDom(root);
+    if (shouldClearTrayOnEntry(root)) {
+      clearAllCandidates(root);
+    }
+    resetSavingUi(form);
 
     form.addEventListener('click', (event) => {
       const target = event.target;
@@ -797,19 +876,6 @@
         ? event.submitter
         : form.querySelector('[data-stagnant-submit]:not([disabled])');
       setSavingState(form, true, submitter instanceof HTMLButtonElement ? submitter : null);
-      // AJAX path (data-dashboard-ajax) keeps the page alive; clear saving if navigate fails later.
-      window.setTimeout(() => {
-        if (document.getElementById('stagnant-offer-form') === form && savingOffer) {
-          // Still on the same form after a long wait — keep spinner (save may still be running).
-        }
-      }, 0);
-    });
-
-    // Reset saving UI when dashboard AJAX finishes (success navigates away; errors stay).
-    document.addEventListener('dashboard:ajax-done', () => {
-      if (document.getElementById('stagnant-offer-form') === form) {
-        setSavingState(form, false, null);
-      }
     });
 
     const defaultDiscount = form.querySelector('[data-stagnant-default-discount]');
@@ -859,12 +925,33 @@
   window.portalStagnantInventoryInit = (root = document) => {
     const existing = document.getElementById('stagnant-offer-form');
     if (!existing) return;
-    if (existing.getAttribute(BOUND) !== '1') {
-      init(root);
+    init(root);
+  };
+
+  document.addEventListener('dashboard:ajax-done', (event) => {
+    const detail = event.detail || {};
+    const form = detail.form;
+    if (!(form instanceof HTMLFormElement) || form.id !== 'stagnant-offer-form') {
       return;
     }
-    syncSubmitState(document);
-  };
+    const active = document.getElementById('stagnant-offer-form');
+    if (active instanceof HTMLFormElement) {
+      resetSavingUi(active);
+    }
+    if (detail.ok && detail.redirect) {
+      markOfferSavedForLaterVisit();
+      clearAllCandidates(document);
+    }
+  });
+
+  window.addEventListener('pageshow', (event) => {
+    const form = document.getElementById('stagnant-offer-form');
+    if (!(form instanceof HTMLFormElement)) return;
+    if (event.persisted && shouldClearTrayOnEntry(document)) {
+      clearAllCandidates(document);
+    }
+    resetSavingUi(form);
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => init(document));
