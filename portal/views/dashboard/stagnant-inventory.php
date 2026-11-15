@@ -315,13 +315,22 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
     <input type="hidden" name="group_guids[]" value="<?= h($guid) ?>">
   <?php endforeach; ?>
 
+  <div class="mb-2 flex flex-wrap items-end justify-between gap-2">
+    <p class="text-sm font-bold text-slate-700 self-center">مواد المخزون الراكد</p>
+    <div class="flex flex-wrap items-end gap-2">
+      <label class="text-sm">
+        <span class="text-text-muted">خصم افتراضي %</span>
+        <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
+      </label>
+      <?php if ($items !== []): ?>
+        <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
+      <?php endif; ?>
+    </div>
+  </div>
+
   <?php if ($items === []): ?>
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
-    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <p class="text-sm font-bold text-slate-700">مواد المخزون الراكد</p>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
-    </div>
     <div class="rounded-xl border border-border-subtle bg-white overflow-x-auto shadow-sm">
       <table class="w-full min-w-[1240px] text-sm border-collapse">
         <thead>
@@ -515,10 +524,6 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       <label class="text-sm">
         <span class="text-text-muted">عنوان العرض</span>
         <input type="text" name="offer_title" value="عرض تصريف راكد <?= h(date('Y-m-d')) ?>" class="mt-1 block w-56 h-10 rounded-xl border border-border-subtle px-3 text-sm">
-      </label>
-      <label class="text-sm">
-        <span class="text-text-muted">خصم افتراضي %</span>
-        <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
       </label>
       <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
       <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" data-loading-label="جاري الحفظ…" disabled>
