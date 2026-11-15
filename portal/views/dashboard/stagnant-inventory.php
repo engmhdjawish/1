@@ -507,7 +507,7 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
 
   <div class="stagnant-candidates-dock-spacer" data-stagnant-tray-spacer aria-hidden="true"></div>
 
-  <div class="stagnant-candidates-dock" data-stagnant-tray>
+  <div class="stagnant-candidates-dock is-tray-empty" data-stagnant-tray>
     <div class="stagnant-candidates-dock__toolbar flex flex-wrap items-end gap-2.5">
       <label class="text-sm">
         <span class="text-text-muted">عنوان العرض</span>
@@ -529,11 +529,23 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
     </div>
     <div class="stagnant-candidates-dock__list-wrap">
-      <div class="flex items-center justify-between gap-2 mb-1.5 flex-shrink-0">
-        <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
-        <p class="text-xs text-text-muted hidden sm:block">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
+      <div class="stagnant-candidates-dock__head">
+        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+          <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
+          <p class="text-xs text-text-muted hidden sm:block">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
+        </div>
+        <button
+          type="button"
+          class="stagnant-candidates-dock__toggle"
+          data-stagnant-tray-toggle
+          aria-expanded="true"
+          aria-controls="stagnant-tray-list-region"
+          title="طيّ / توسيع ملخّص المرشّحين"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+        </button>
       </div>
-      <div class="stagnant-candidates-dock__list" data-stagnant-tray-list>
+      <div class="stagnant-candidates-dock__list" data-stagnant-tray-list id="stagnant-tray-list-region">
         <p class="text-xs text-text-muted px-3 py-3 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
       </div>
     </div>

@@ -159,6 +159,52 @@
     return n === null ? 15 : Math.max(0, Math.min(95, n));
   }
 
+  function trayDock() {
+    return document.querySelector('[data-stagnant-tray]');
+  }
+
+  function traySpacer() {
+    return document.querySelector('[data-stagnant-tray-spacer]');
+  }
+
+  function syncTrayDockSpacer() {
+    const dock = trayDock();
+    const spacer = traySpacer();
+    if (!(dock instanceof HTMLElement)) return;
+    const height = Math.ceil(dock.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--stagnant-dock-spacer-height', height + 'px');
+    if (spacer instanceof HTMLElement) {
+      spacer.style.height = height + 'px';
+    }
+  }
+
+  let trayResizeObserver = null;
+
+  function bindTrayDockLayout() {
+    const dock = trayDock();
+    if (!(dock instanceof HTMLElement)) return;
+    if (typeof ResizeObserver !== 'undefined') {
+      trayResizeObserver?.disconnect();
+      trayResizeObserver = new ResizeObserver(() => syncTrayDockSpacer());
+      trayResizeObserver.observe(dock);
+    } else {
+      window.addEventListener('resize', syncTrayDockSpacer);
+    }
+    syncTrayDockSpacer();
+  }
+
+  function syncTrayDockChrome() {
+    const dock = trayDock();
+    if (!(dock instanceof HTMLElement)) return;
+    dock.classList.toggle('is-tray-empty', candidates.size === 0);
+    const toggle = dock.querySelector('[data-stagnant-tray-toggle]');
+    if (toggle instanceof HTMLButtonElement) {
+      const collapsed = dock.classList.contains('is-tray-collapsed');
+      toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    syncTrayDockSpacer();
+  }
+
   function syncSubmitState(root = document) {
     const count = candidates.size;
     root.querySelectorAll('[data-stagnant-selected-count]').forEach((el) => {
@@ -583,10 +629,11 @@
 
     if (candidateOrder.length === 0) {
       const empty = document.createElement('p');
-      empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
+      empty.className = 'text-xs text-text-muted px-3 py-2 text-center';
       empty.setAttribute('data-stagnant-tray-empty', '');
       empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
       list.appendChild(empty);
+      syncTrayDockChrome();
       return;
     }
 
@@ -594,6 +641,7 @@
       const item = candidates.get(guid);
       if (item) appendTrayItem(item, false);
     });
+    syncTrayDockChrome();
   }
 
   function syncSourceRow(item) {
@@ -836,6 +884,8 @@
       }
       resetSavingUi(form);
       syncSubmitState(root);
+      bindTrayDockLayout();
+      syncTrayDockChrome();
       return;
     }
     form.setAttribute(BOUND, '1');
@@ -916,6 +966,18 @@
       Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));
     });
 
+    document.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
+      const dock = trayDock();
+      if (!(dock instanceof HTMLElement)) return;
+      const collapsed = dock.classList.toggle('is-tray-collapsed');
+      const toggle = dock.querySelector('[data-stagnant-tray-toggle]');
+      if (toggle instanceof HTMLButtonElement) {
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+      syncTrayDockSpacer();
+    });
+
+    bindTrayDockLayout();
     bindPreview(form);
     applyDefaultDiscount(form);
     renderTray();

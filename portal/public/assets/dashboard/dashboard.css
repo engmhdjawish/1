@@ -2604,14 +2604,21 @@ button.is-loading[data-loading-label],
   color: #9a3412;
 }
 
-/* Stagnant inventory — fixed bottom candidates dock (table stays put) */
+/* Stagnant inventory — compact fixed bottom candidates dock (table stays scrollable above) */
 :root {
-  --stagnant-dock-height: min(42vh, 26rem);
+  --stagnant-dock-max-height: min(40vh, 22rem);
+  --stagnant-dock-list-max-height: min(28vh, 14rem);
+  --stagnant-dock-spacer-height: 12.5rem;
 }
 
 .stagnant-candidates-dock-spacer {
-  height: var(--stagnant-dock-height);
+  height: var(--stagnant-dock-spacer-height);
+  flex-shrink: 0;
   pointer-events: none;
+}
+
+#stagnant-offer-form {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
 }
 
 .stagnant-candidates-dock {
@@ -2622,8 +2629,9 @@ button.is-loading[data-loading-label],
   bottom: 0;
   display: flex;
   flex-direction: column;
-  height: var(--stagnant-dock-height);
-  max-height: var(--stagnant-dock-height);
+  width: 100%;
+  height: auto;
+  max-height: var(--stagnant-dock-max-height);
   border-top: 1px solid var(--dash-border, #e5e7eb);
   border-radius: 1rem 1rem 0 0;
   background: rgba(255, 255, 255, 0.97);
@@ -2631,8 +2639,8 @@ button.is-loading[data-loading-label],
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 -10px 36px rgba(15, 23, 42, 0.14);
   padding:
-    0.65rem 0.85rem
-    max(0.65rem, env(safe-area-inset-bottom, 0px));
+    0.55rem 0.85rem
+    max(0.55rem, env(safe-area-inset-bottom, 0px));
   overflow: hidden;
 }
 
@@ -2653,23 +2661,73 @@ body.dashboard-app.has-bottom-nav .stagnant-candidates-dock {
 }
 
 .stagnant-candidates-dock__list-wrap {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-top: 0.5rem;
+  padding-top: 0.45rem;
+  overflow: hidden;
+}
+
+.stagnant-candidates-dock.is-tray-collapsed .stagnant-candidates-dock__list-wrap {
+  display: none;
+}
+
+.stagnant-candidates-dock.is-tray-empty .stagnant-candidates-dock__list,
+[data-stagnant-tray-list].stagnant-candidates-dock__list:has([data-stagnant-tray-empty]) {
+  min-height: 0;
+  max-height: 3.25rem;
+}
+
+.stagnant-candidates-dock__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex-shrink: 0;
+}
+
+.stagnant-candidates-dock__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+  color: #475569;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.stagnant-candidates-dock__toggle:hover {
+  background: #f8fafc;
+  border-color: color-mix(in srgb, var(--dash-border, #e5e7eb) 55%, #94a3b8);
+}
+
+.stagnant-candidates-dock__toggle .material-symbols-outlined {
+  font-size: 1.25rem;
+  transition: transform 0.2s ease;
+}
+
+.stagnant-candidates-dock.is-tray-collapsed .stagnant-candidates-dock__toggle .material-symbols-outlined {
+  transform: rotate(180deg);
 }
 
 .stagnant-candidates-dock__list,
 [data-stagnant-tray-list].stagnant-candidates-dock__list {
-  flex: 1;
-  min-height: 2.75rem;
+  flex: 0 1 auto;
+  min-height: 2.5rem;
+  max-height: var(--stagnant-dock-list-max-height);
   overflow-x: hidden;
   overflow-y: auto;
   border-radius: 0.75rem;
   border: 1px dashed var(--dash-border, #e5e7eb);
   background: color-mix(in srgb, #f8fafc 85%, #fff);
   scroll-padding-block: 0.5rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .stagnant-candidates-dock__list > [data-tray-guid],
