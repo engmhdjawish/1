@@ -200,16 +200,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $dbError = null;
 $stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
+$offers = [];
 $offerAnalyticsById = [];
 $editOfferAnalytics = null;
 try {
     $stats = SpecialOfferService::stats();
     $offers = SpecialOfferService::adminList();
-    $offerIds = array_map(static fn ($row): string => (string) ($row['id'] ?? ''), $offers);
-    $offerAnalyticsById = SpecialOfferAnalyticsService::summariesForOffers($offerIds);
 } catch (\Throwable $e) {
     $offers = [];
-    $dbError = 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.';
+    $errMsg = $e->getMessage();
+    // Migration hint only when the core offers tables/relations are named in the error.
+    $looksLikeMissingOffersSchema = (bool) preg_match(
+        '/special_offers|special_offer_products/i',
+        $errMsg
+    );
+    $dbError = $looksLikeMissingOffersSchema
+        ? 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.'
+        : ('تعذر تحميل العروض: ' . $errMsg);
+}
+
+// Analytics is best-effort: never blank the list or show the offers-migration banner.
+if ($dbError === null) {
+    try {
+        $offerIds = array_map(static fn ($row): string => (string) ($row['id'] ?? ''), $offers);
+        $offerAnalyticsById = SpecialOfferAnalyticsService::summariesForOffers($offerIds);
+    } catch (\Throwable) {
+        $offerAnalyticsById = [];
+    }
 }
 
 $editOffer = null;

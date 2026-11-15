@@ -62,48 +62,56 @@ final class SpecialOfferAnalyticsService
         }
         $in = implode(', ', $placeholders);
 
-        $sales = Database::pdo()->prepare(
-            'SELECT oi.special_offer_id::text AS offer_id,
-                    COUNT(DISTINCT oi.order_id)::int AS orders,
-                    COUNT(*)::int AS lines,
-                    COALESCE(SUM(oi.quantity), 0)::float AS packages,
-                    COALESCE(SUM(oi.sale_price_sp * oi.quantity), 0)::float AS revenue_syp,
-                    COALESCE(SUM(oi.sale_price_usd * oi.quantity), 0)::float AS revenue_usd,
-                    COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_sp, oi.sale_price_sp) - oi.sale_price_sp, 0) * oi.quantity), 0)::float AS discount_syp,
-                    COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_usd, oi.sale_price_usd) - oi.sale_price_usd, 0) * oi.quantity), 0)::float AS discount_usd,
-                    COUNT(DISTINCT oi.material_guid)::int AS materials
-             FROM order_items oi
-             INNER JOIN orders o ON o.id = oi.order_id
-             WHERE oi.special_offer_id IN (' . $in . ')
-               AND o.status NOT IN (\'cancelled\', \'rejected\')
-             GROUP BY oi.special_offer_id'
-        );
-        $sales->execute($params);
-        foreach ($sales->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
-            $id = (string) ($row['offer_id'] ?? '');
-            if ($id === '' || !isset($out[$id])) {
-                continue;
+        try {
+            $sales = Database::pdo()->prepare(
+                'SELECT oi.special_offer_id::text AS offer_id,
+                        COUNT(DISTINCT oi.order_id)::int AS orders,
+                        COUNT(*)::int AS lines,
+                        COALESCE(SUM(oi.quantity), 0)::float AS packages,
+                        COALESCE(SUM(oi.sale_price_sp * oi.quantity), 0)::float AS revenue_syp,
+                        COALESCE(SUM(oi.sale_price_usd * oi.quantity), 0)::float AS revenue_usd,
+                        COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_sp, oi.sale_price_sp) - oi.sale_price_sp, 0) * oi.quantity), 0)::float AS discount_syp,
+                        COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_usd, oi.sale_price_usd) - oi.sale_price_usd, 0) * oi.quantity), 0)::float AS discount_usd,
+                        COUNT(DISTINCT oi.material_guid)::int AS materials
+                 FROM order_items oi
+                 INNER JOIN orders o ON o.id = oi.order_id
+                 WHERE oi.special_offer_id IN (' . $in . ')
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')
+                 GROUP BY oi.special_offer_id'
+            );
+            $sales->execute($params);
+            foreach ($sales->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $id = (string) ($row['offer_id'] ?? '');
+                if ($id === '' || !isset($out[$id])) {
+                    continue;
+                }
+                $out[$id] = array_merge($out[$id], [
+                    'orders' => (int) ($row['orders'] ?? 0),
+                    'lines' => (int) ($row['lines'] ?? 0),
+                    'packages' => (float) ($row['packages'] ?? 0),
+                    'revenue_syp' => (float) ($row['revenue_syp'] ?? 0),
+                    'revenue_usd' => (float) ($row['revenue_usd'] ?? 0),
+                    'discount_syp' => (float) ($row['discount_syp'] ?? 0),
+                    'discount_usd' => (float) ($row['discount_usd'] ?? 0),
+                    'materials' => (int) ($row['materials'] ?? 0),
+                ]);
             }
-            $out[$id] = array_merge($out[$id], [
-                'orders' => (int) ($row['orders'] ?? 0),
-                'lines' => (int) ($row['lines'] ?? 0),
-                'packages' => (float) ($row['packages'] ?? 0),
-                'revenue_syp' => (float) ($row['revenue_syp'] ?? 0),
-                'revenue_usd' => (float) ($row['revenue_usd'] ?? 0),
-                'discount_syp' => (float) ($row['discount_syp'] ?? 0),
-                'discount_usd' => (float) ($row['discount_usd'] ?? 0),
-                'materials' => (int) ($row['materials'] ?? 0),
-            ]);
+        } catch (\Throwable) {
+            // Missing special_offer_id / original_sale_price_* columns — keep zero sales.
         }
 
         // Engagement: visitor_logs whose details JSON mentions offer slug/id (best-effort).
-        $slugs = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug FROM special_offers WHERE id IN (' . $in . ')'
-        );
-        $slugs->execute($params);
         $slugById = [];
-        foreach ($slugs->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
-            $slugById[(string) $row['id']] = (string) $row['slug'];
+        try {
+            $slugs = Database::pdo()->prepare(
+                'SELECT id::text AS id, slug FROM special_offers WHERE id IN (' . $in . ')'
+            );
+            $slugs->execute($params);
+            foreach ($slugs->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $slugById[(string) $row['id']] = (string) $row['slug'];
+            }
+        } catch (\Throwable) {
+            return $out;
         }
 
         foreach ($slugById as $id => $slug) {
@@ -132,7 +140,7 @@ final class SpecialOfferAnalyticsService
                 $out[$id]['page_views'] = (int) ($row['page_views'] ?? 0);
                 $out[$id]['add_to_cart'] = (int) ($row['add_to_cart'] ?? 0);
             } catch (\Throwable) {
-                // details_ar may be missing on older DBs — ignore engagement.
+                // visitor_logs / details_ar may be missing on older DBs — ignore engagement.
             }
         }
 
@@ -164,25 +172,29 @@ final class SpecialOfferAnalyticsService
 
         $materials = [];
         if ($offerId !== '') {
-            $stmt = Database::pdo()->prepare(
-                'SELECT oi.material_guid::text AS material_guid,
-                        MAX(oi.material_name_ar) AS material_name_ar,
-                        MAX(oi.material_code) AS material_code,
-                        COUNT(DISTINCT oi.order_id)::int AS orders,
-                        COALESCE(SUM(oi.quantity), 0)::float AS packages,
-                        COALESCE(SUM(oi.sale_price_sp * oi.quantity), 0)::float AS revenue_syp,
-                        COALESCE(SUM(oi.sale_price_usd * oi.quantity), 0)::float AS revenue_usd,
-                        COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_sp, oi.sale_price_sp) - oi.sale_price_sp, 0) * oi.quantity), 0)::float AS discount_syp
-                 FROM order_items oi
-                 INNER JOIN orders o ON o.id = oi.order_id
-                 WHERE oi.special_offer_id = :id
-                   AND o.status NOT IN (\'cancelled\', \'rejected\')
-                 GROUP BY oi.material_guid
-                 ORDER BY packages DESC, revenue_syp DESC
-                 LIMIT 48'
-            );
-            $stmt->execute(['id' => $offerId]);
-            $materials = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            try {
+                $stmt = Database::pdo()->prepare(
+                    'SELECT oi.material_guid::text AS material_guid,
+                            MAX(oi.material_name_ar) AS material_name_ar,
+                            MAX(oi.material_code) AS material_code,
+                            COUNT(DISTINCT oi.order_id)::int AS orders,
+                            COALESCE(SUM(oi.quantity), 0)::float AS packages,
+                            COALESCE(SUM(oi.sale_price_sp * oi.quantity), 0)::float AS revenue_syp,
+                            COALESCE(SUM(oi.sale_price_usd * oi.quantity), 0)::float AS revenue_usd,
+                            COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_sp, oi.sale_price_sp) - oi.sale_price_sp, 0) * oi.quantity), 0)::float AS discount_syp
+                     FROM order_items oi
+                     INNER JOIN orders o ON o.id = oi.order_id
+                     WHERE oi.special_offer_id = :id
+                       AND o.status NOT IN (\'cancelled\', \'rejected\')
+                     GROUP BY oi.material_guid
+                     ORDER BY packages DESC, revenue_syp DESC
+                     LIMIT 48'
+                );
+                $stmt->execute(['id' => $offerId]);
+                $materials = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (\Throwable) {
+                $materials = [];
+            }
         }
 
         $conversion = $summary['page_views'] > 0
@@ -206,16 +218,20 @@ final class SpecialOfferAnalyticsService
         if ($offerId === '' || $materialGuid === '') {
             return 0.0;
         }
-        $stmt = Database::pdo()->prepare(
-            'SELECT COALESCE(SUM(oi.quantity), 0)::float
-             FROM order_items oi
-             INNER JOIN orders o ON o.id = oi.order_id
-             WHERE oi.special_offer_id = :offer_id
-               AND LOWER(oi.material_guid::text) = :guid
-               AND o.status NOT IN (\'cancelled\', \'rejected\')'
-        );
-        $stmt->execute(['offer_id' => $offerId, 'guid' => $materialGuid]);
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT COALESCE(SUM(oi.quantity), 0)::float
+                 FROM order_items oi
+                 INNER JOIN orders o ON o.id = oi.order_id
+                 WHERE oi.special_offer_id = :offer_id
+                   AND LOWER(oi.material_guid::text) = :guid
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')'
+            );
+            $stmt->execute(['offer_id' => $offerId, 'guid' => $materialGuid]);
 
-        return (float) $stmt->fetchColumn();
+            return (float) $stmt->fetchColumn();
+        } catch (\Throwable) {
+            return 0.0;
+        }
     }
 }
