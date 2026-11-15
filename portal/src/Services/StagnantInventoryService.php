@@ -120,6 +120,8 @@ final class StagnantInventoryService
      *
      * @param list<string> $materialGuids
      * @param array<string, float|int|string> $perMaterialPercents guid => percent
+     * @param array<string, float|int|string> $perMaterialWarehouseQty guid => primary units from stagnant «كمية»
+     *        (pairs/units — NOT packages). Converted via packaging to qty_cap_packages.
      * @return array{ok: bool, message: string, id?: string|null}
      */
     public static function createOfferFromSelection(
@@ -128,7 +130,8 @@ final class StagnantInventoryService
         float $defaultPercent,
         string $titleAr,
         ?string $userId,
-        bool $asDraft = true
+        bool $asDraft = true,
+        array $perMaterialWarehouseQty = []
     ): array {
         $guids = [];
         foreach ($materialGuids as $guid) {
@@ -147,6 +150,29 @@ final class StagnantInventoryService
             $title = 'عرض تصريف راكد ' . date('Y-m-d');
         }
 
+        // Stagnant «كمية» is warehouse primary units (pairs), same as RemainingQuantity / warehouseQuantity.
+        // qty_cap_packages must be packages (طرود) = units / packaging — never store units as the cap.
+        $postedWarehouseUnits = [];
+        foreach ($perMaterialWarehouseQty as $key => $rawQty) {
+            $key = strtolower(trim((string) $key));
+            if ($key === '' || !is_numeric($rawQty)) {
+                continue;
+            }
+            $postedWarehouseUnits[$key] = max(0.0, round((float) $rawQty, 4));
+        }
+
+        $materialsByGuid = [];
+        try {
+            $fetched = MaterialBatchService::fetchByGuids($guids, 45);
+            foreach ($fetched as $key => $payload) {
+                if (is_array($payload)) {
+                    $materialsByGuid[strtolower(trim((string) $key))] = $payload;
+                }
+            }
+        } catch (\Throwable) {
+            $materialsByGuid = [];
+        }
+
         $overrides = [];
         foreach ($guids as $guid) {
             $raw = $perMaterialPercents[$guid]
@@ -154,9 +180,21 @@ final class StagnantInventoryService
                 ?? $defaultPercent;
             $pct = is_numeric($raw) ? (float) $raw : $defaultPercent;
             $pct = max(0.01, min(95.0, $pct));
+            $material = $materialsByGuid[strtolower($guid)] ?? [];
+            if (!is_array($material)) {
+                $material = [];
+            }
+            // Prefer the stagnant «كمية» the admin saw (primary units), ÷ packaging → طرود.
+            // Fall back to API warehouseQuantity when the tray snapshot is missing.
+            if (array_key_exists($guid, $postedWarehouseUnits)) {
+                $material['warehouseQuantity'] = $postedWarehouseUnits[$guid];
+            }
+            $packages = self::packagesFromMaterial($material);
             $overrides[$guid] = [
                 'discount_type' => 'percent',
                 'discount_percent' => $pct,
+                'qty_mode' => 'fixed',
+                'qty_cap_packages' => $packages,
             ];
         }
 
@@ -282,5 +320,24 @@ final class StagnantInventoryService
         }
 
         return null;
+    }
+
+    /**
+     * Current sellable packages from an API material payload (warehouse primary units / packaging).
+     *
+     * @param array<string, mixed> $material
+     */
+    private static function packagesFromMaterial(array $material): float
+    {
+        $packaging = max(0.0001, ShareCartService::packaging($material));
+        $warehouse = 0.0;
+        foreach (['warehouseQuantity', 'WarehouseQuantity', 'warehouse_quantity', 'stagnantRemainingQty'] as $key) {
+            if (isset($material[$key]) && is_numeric((string) $material[$key])) {
+                $warehouse = max(0.0, (float) $material[$key]);
+                break;
+            }
+        }
+
+        return max(0.0, round($warehouse / $packaging, 4));
     }
 }

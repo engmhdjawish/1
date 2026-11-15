@@ -242,9 +242,23 @@
   let pageViewPosted = false;
   let pageViewHadGps = false;
 
+  const offerContext = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const slug = (params.get('offer') || params.get('special_offer') || '').trim();
+      if (slug !== '') return { offer_slug: slug };
+      const el = document.querySelector('[data-offer-slug]');
+      const fromDom = (el?.getAttribute('data-offer-slug') || '').trim();
+      return fromDom !== '' ? { offer_slug: fromDom } : {};
+    } catch {
+      return {};
+    }
+  };
+
   const send = (action, meta = {}) => {
     void (async () => {
       const payloadMeta = meta && typeof meta === 'object' ? { ...meta } : {};
+      Object.assign(payloadMeta, offerContext());
       const gps = action === 'gps_fix' ? readCachedGps() : await waitForGps();
       if (gps) {
         payloadMeta.gps_latitude = gps.latitude;

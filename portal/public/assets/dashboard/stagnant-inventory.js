@@ -4,10 +4,197 @@
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
-  /** @type {Map<string, {guid:string, name:string, code:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null}>} */
+  const TRAY_SAVED_SESSION_KEY = 'portal.stagnant-offer-saved';
+  const TRAY_CANDIDATES_SESSION_KEY = 'portal.stagnant-offer-candidates';
+  /** @type {Map<string, {guid:string, name:string, code:string, image:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null, warehouseQty:number|null}>} */
   const candidates = new Map();
+  /** Insertion order for tray rows — always append new candidates at the end. */
+  /** @type {string[]} */
+  const candidateOrder = [];
   let activeRow = null;
   let syncingPreview = false;
+  let savingOffer = false;
+
+  function markOfferSavedForLaterVisit() {
+    try {
+      sessionStorage.setItem(TRAY_SAVED_SESSION_KEY, '1');
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function consumeSavedTrayFlag() {
+    try {
+      if (sessionStorage.getItem(TRAY_SAVED_SESSION_KEY) === '1') {
+        sessionStorage.removeItem(TRAY_SAVED_SESSION_KEY);
+        return true;
+      }
+    } catch (_) {
+      /* storage blocked */
+    }
+    return false;
+  }
+
+  function shouldClearTrayOnEntry(root = document) {
+    if (consumeSavedTrayFlag()) {
+      return true;
+    }
+    const form = root.querySelector?.('#stagnant-offer-form')
+      || (root instanceof Document ? root.getElementById('stagnant-offer-form') : null)
+      || document.getElementById('stagnant-offer-form');
+    if (form?.getAttribute('data-stagnant-clear-tray') === '1') {
+      return true;
+    }
+    if (typeof window !== 'undefined' && window.location.search.includes('saved=1')) {
+      return true;
+    }
+    return false;
+  }
+
+  function persistCandidates() {
+    try {
+      const items = [];
+      candidateOrder.forEach((guid) => {
+        const item = candidates.get(guid);
+        if (item) items.push(item);
+      });
+      if (items.length === 0) {
+        sessionStorage.removeItem(TRAY_CANDIDATES_SESSION_KEY);
+        return;
+      }
+      sessionStorage.setItem(TRAY_CANDIDATES_SESSION_KEY, JSON.stringify({
+        order: candidateOrder.slice(),
+        items,
+      }));
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function clearPersistedCandidates() {
+    try {
+      sessionStorage.removeItem(TRAY_CANDIDATES_SESSION_KEY);
+    } catch (_) {
+      /* storage blocked */
+    }
+  }
+
+  function loadCandidatesFromSession() {
+    try {
+      const raw = sessionStorage.getItem(TRAY_CANDIDATES_SESSION_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.items) || !Array.isArray(data.order)) return false;
+      candidates.clear();
+      candidateOrder.length = 0;
+      data.items.forEach((item) => {
+        if (!item || typeof item !== 'object') return;
+        const guid = String(item.guid || '').toLowerCase();
+        if (!guid) return;
+        candidates.set(guid, {
+          guid,
+          name: String(item.name || guid),
+          code: String(item.code || ''),
+          image: String(item.image || ''),
+          saleUsd: typeof item.saleUsd === 'number' ? item.saleUsd : null,
+          purchaseUsd: typeof item.purchaseUsd === 'number' ? item.purchaseUsd : null,
+          rate: typeof item.rate === 'number' ? item.rate : 0,
+          percent: typeof item.percent === 'number' ? item.percent : 15,
+          priceUsd: typeof item.priceUsd === 'number' ? item.priceUsd : null,
+          // «كمية» is warehouse primary units (pairs); server converts to packages.
+          warehouseQty: typeof item.warehouseQty === 'number'
+            ? item.warehouseQty
+            : (typeof item.packages === 'number' ? item.packages : null),
+        });
+      });
+      data.order.forEach((guid) => {
+        const key = String(guid || '').toLowerCase();
+        if (key && candidates.has(key) && !candidateOrder.includes(key)) {
+          candidateOrder.push(key);
+        }
+      });
+      candidates.forEach((_item, guid) => {
+        if (!candidateOrder.includes(guid)) candidateOrder.push(guid);
+      });
+      return candidates.size > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function restoreHiddenMaterialRows(root = document) {
+    const scope = root instanceof Document ? root : root.ownerDocument || document;
+    scope.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      if (row instanceof HTMLElement && (row.hidden || row.classList.contains('is-in-tray'))) {
+        markRowInTray(row, false);
+      }
+    });
+  }
+
+  /** Re-hide current-page material rows that are still in the candidates tray. */
+  function hideRowsForTrayCandidates(root = document) {
+    const scope = root instanceof Document ? root : root.ownerDocument || document;
+    scope.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+      markRowInTray(row, !!(guid && candidates.has(guid)));
+    });
+  }
+
+  function clearAllCandidates(root = document) {
+    candidateOrder.length = 0;
+    candidates.clear();
+    clearPersistedCandidates();
+    restoreHiddenMaterialRows(root);
+    renderTray();
+    syncSubmitState(root);
+    updateNavControls();
+  }
+
+  function stashOriginalSubmitLabels(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (!btn.getAttribute('data-stagnant-original-html')) {
+        btn.setAttribute('data-stagnant-original-html', btn.innerHTML || '');
+      }
+    });
+  }
+
+  function resetSavingUi(form) {
+    savingOffer = false;
+    if (!(form instanceof HTMLFormElement)) {
+      form = document.getElementById('stagnant-offer-form');
+    }
+    if (!(form instanceof HTMLFormElement)) return;
+
+    form.classList.remove('is-saving');
+    form.setAttribute('aria-busy', 'false');
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      const original = btn.getAttribute('data-stagnant-original-html')
+        || btn.dataset.stagnantLabel
+        || '';
+      if (original) {
+        btn.innerHTML = original;
+      }
+      delete btn.dataset.stagnantLabel;
+      delete btn.dataset.dashboardPrevLabel;
+      delete btn.dataset.dashboardLoadingLabelApplied;
+      btn.classList.remove('is-loading');
+      btn.removeAttribute('aria-busy');
+    });
+    form.querySelectorAll('[data-stagnant-add], [data-stagnant-add-visible], [data-stagnant-clear-tray]').forEach((el) => {
+      if (el instanceof HTMLButtonElement) el.disabled = false;
+    });
+    const hint = form.querySelector('[data-stagnant-saving-hint]')
+      || document.querySelector('[data-stagnant-saving-hint]');
+    if (hint instanceof HTMLElement) {
+      hint.classList.add('hidden');
+      hint.textContent = '';
+    }
+    syncSubmitState(document);
+  }
 
   function roundUpTo5(amount) {
     if (!(amount > 0)) return 0;
@@ -51,9 +238,68 @@
     return !!(modal && !modal.hidden && modal.classList.contains('is-open'));
   }
 
+  /** Visible materials only (candidates / leaving rows are excluded). */
   function allRows(includeHidden = false) {
-    return Array.from(document.querySelectorAll('[data-stagnant-card]'))
-      .filter((row) => includeHidden || !row.hidden);
+    return Array.from(document.querySelectorAll('[data-stagnant-card]')).filter((row) => {
+      if (!(row instanceof HTMLElement)) return false;
+      if (includeHidden) return true;
+      if (row.hidden || row.classList.contains('is-in-tray') || row.classList.contains('is-tray-leaving')) {
+        return false;
+      }
+      const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+      if (guid && candidates.has(guid)) return false;
+      return true;
+    });
+  }
+
+  const TRAY_ANIM_MS = 240;
+
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function afterAnim(el, ms, cb) {
+    if (!(el instanceof HTMLElement) || prefersReducedMotion()) {
+      cb();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      el.removeEventListener('animationend', onEnd);
+      clearTimeout(tid);
+      cb();
+    };
+    const onEnd = (event) => {
+      if (event.target === el) finish();
+    };
+    el.addEventListener('animationend', onEnd);
+    const tid = setTimeout(finish, ms + 80);
+  }
+
+  function markRowInTray(row, inTray) {
+    if (!(row instanceof HTMLElement)) return;
+    row.classList.remove('is-tray-leaving', 'is-tray-entering');
+    // Priority: remove from materials table while it lives in the candidates tray.
+    row.hidden = !!inTray;
+    row.classList.toggle('is-in-tray', inTray);
+    if (inTray) row.setAttribute('data-stagnant-in-tray', '1');
+    else row.removeAttribute('data-stagnant-in-tray');
+    const addBtn = row.querySelector('[data-stagnant-add]');
+    if (addBtn instanceof HTMLButtonElement) {
+      addBtn.textContent = 'إضافة';
+      addBtn.disabled = false;
+      addBtn.classList.remove('is-added');
+    }
+    const badge = row.querySelector('[data-stagnant-tray-badge]');
+    if (badge instanceof HTMLElement) {
+      badge.hidden = true;
+    }
   }
 
   function rowSaleUsd(row) {
@@ -74,14 +320,63 @@
     return n === null ? 15 : Math.max(0, Math.min(95, n));
   }
 
+  function traySection() {
+    return document.querySelector('[data-stagnant-tray]');
+  }
+
+  function syncTraySectionChrome() {
+    const section = traySection();
+    if (!(section instanceof HTMLElement)) return;
+    section.classList.toggle('is-tray-empty', candidates.size === 0);
+    const toggle = section.querySelector('[data-stagnant-tray-toggle]');
+    if (toggle instanceof HTMLButtonElement) {
+      const collapsed = section.classList.contains('is-tray-collapsed');
+      toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+  }
+
   function syncSubmitState(root = document) {
     const count = candidates.size;
     root.querySelectorAll('[data-stagnant-selected-count]').forEach((el) => {
       el.textContent = String(count);
     });
     root.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
-      if (btn instanceof HTMLButtonElement) btn.disabled = count === 0;
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = savingOffer || count === 0;
+      }
     });
+    const hint = root.querySelector('[data-stagnant-saving-hint]');
+    if (hint instanceof HTMLElement) {
+      hint.classList.toggle('hidden', !savingOffer);
+      hint.textContent = savingOffer ? 'جاري الحفظ…' : '';
+    }
+  }
+
+  function setSavingState(form, saving, submitter) {
+    savingOffer = saving;
+    if (!saving) {
+      resetSavingUi(form);
+      return;
+    }
+    stashOriginalSubmitLabels(form);
+    form.classList.add('is-saving');
+    form.setAttribute('aria-busy', 'true');
+    form.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (!btn.dataset.stagnantLabel) {
+        btn.dataset.stagnantLabel = btn.getAttribute('data-stagnant-original-html') || btn.innerHTML || '';
+      }
+      const label = btn.getAttribute('data-loading-label') || 'جاري الحفظ…';
+      if (btn === submitter || !submitter) {
+        btn.textContent = label;
+      }
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+    });
+    form.querySelectorAll('[data-stagnant-add], [data-stagnant-add-visible], [data-stagnant-clear-tray]').forEach((el) => {
+      if (el instanceof HTMLButtonElement) el.disabled = true;
+    });
+    syncSubmitState(document);
   }
 
   function applyBelowCost(row, saleAfterUsd) {
@@ -163,7 +458,8 @@
       const item = candidates.get(guid);
       item.percent = pct;
       item.priceUsd = after;
-      renderTray();
+      updateTrayItemPricing(item);
+      persistCandidates();
     }
   }
 
@@ -197,7 +493,8 @@
       const item = candidates.get(guid);
       item.percent = pct;
       item.priceUsd = after;
-      renderTray();
+      updateTrayItemPricing(item);
+      persistCandidates();
     }
   }
 
@@ -224,10 +521,22 @@
     return { percent, priceUsd };
   }
 
-  function addCandidateFromRow(row) {
+  /** Warehouse primary units from stagnant «كمية» (pairs/units — not packages/طرود). */
+  function rowWarehouseQty(row) {
+    const raw = parseLoose(row.getAttribute('data-qty'));
+    if (raw === null || raw < 0) return null;
+    return Math.round(raw * 10000) / 10000;
+  }
+
+  function addCandidateFromRow(row, options = {}) {
     if (!(row instanceof HTMLElement)) return false;
+    const animate = options.animate !== false && !prefersReducedMotion();
     const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
     if (!guid) return false;
+    if (candidates.has(guid)) {
+      markRowInTray(row, true);
+      return false;
+    }
     const pricing = readRowPricing(row);
     candidates.set(guid, {
       guid,
@@ -239,28 +548,261 @@
       rate: rowRate(row),
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
+      warehouseQty: rowWarehouseQty(row),
     });
-    row.hidden = true;
-    row.setAttribute('data-stagnant-in-tray', '1');
-    renderTray();
+    candidateOrder.push(guid);
+
+    const hideMaterialRow = () => {
+      markRowInTray(row, true);
+    };
+    if (animate) {
+      row.classList.remove('is-tray-entering');
+      row.classList.add('is-tray-leaving');
+      afterAnim(row, TRAY_ANIM_MS, hideMaterialRow);
+    } else {
+      hideMaterialRow();
+    }
+
+    // Animate into candidates list — never scroll/jump the viewport here.
+    appendTrayItem(candidates.get(guid), { animate });
+    persistCandidates();
     syncSubmitState();
+    syncTraySectionChrome();
+    syncPreviewPricingFromRow();
+    updateNavControls();
     return true;
   }
 
-  function removeCandidate(guid) {
+  function showEmptyTrayMessage(list) {
+    if (!(list instanceof HTMLElement) || candidates.size > 0) return;
+    // Wait until leaving rows finish — do not wipe siblings mid-animation.
+    if (list.querySelector('[data-tray-guid]')) return;
+    if (list.querySelector('[data-stagnant-tray-empty]')) return;
+    list.innerHTML = '';
+    const empty = document.createElement('p');
+    empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
+    empty.setAttribute('data-stagnant-tray-empty', '');
+    empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
+    list.appendChild(empty);
+  }
+
+  function restoreMaterialRow(row, animate) {
+    if (!(row instanceof HTMLElement)) return;
+    markRowInTray(row, false);
+    if (!animate) return;
+    row.classList.remove('is-tray-leaving');
+    row.classList.add('is-tray-entering');
+    afterAnim(row, TRAY_ANIM_MS, () => {
+      row.classList.remove('is-tray-entering');
+    });
+  }
+
+  function removeCandidate(guid, options = {}) {
+    const animate = options.animate !== false && !prefersReducedMotion();
     candidates.delete(guid);
+    const orderIdx = candidateOrder.indexOf(guid);
+    if (orderIdx >= 0) candidateOrder.splice(orderIdx, 1);
     const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
-    if (row instanceof HTMLElement) {
-      row.hidden = false;
-      row.removeAttribute('data-stagnant-in-tray');
-      const addBtn = row.querySelector('[data-stagnant-add]');
-      if (addBtn instanceof HTMLButtonElement) {
-        addBtn.textContent = 'إضافة';
-        addBtn.disabled = false;
-      }
-    }
-    renderTray();
+    const trayRow = document.querySelector('[data-tray-guid="' + guid + '"]');
+    const list = document.querySelector('[data-stagnant-tray-list]');
+
+    const finishRemove = () => {
+      trayRow?.remove();
+      showEmptyTrayMessage(list);
+      restoreMaterialRow(row, animate);
+      if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
+      updateNavControls();
+    };
+
+    persistCandidates();
     syncSubmitState();
+    syncTraySectionChrome();
+
+    if (animate && trayRow instanceof HTMLElement) {
+      trayRow.classList.remove('is-tray-item-enter');
+      trayRow.classList.add('is-tray-item-leave');
+      afterAnim(trayRow, TRAY_ANIM_MS, finishRemove);
+    } else {
+      finishRemove();
+    }
+  }
+
+  function updateTrayItemPricing(item) {
+    if (!item) return;
+    const trayRow = document.querySelector('[data-tray-guid="' + item.guid + '"]');
+    if (!(trayRow instanceof HTMLElement)) {
+      appendTrayItem(item, { animate: false });
+      return;
+    }
+    const pctInput = trayRow.querySelector('input[name^="material_discount"]');
+    const priceInput = trayRow.querySelector('[data-tray-price]');
+    const sypEl = trayRow.querySelector('[data-tray-syp]');
+    if (pctInput instanceof HTMLInputElement && document.activeElement !== pctInput) {
+      pctInput.value = formatPct(item.percent);
+    }
+    if (priceInput instanceof HTMLInputElement && document.activeElement !== priceInput) {
+      priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
+    }
+    if (sypEl instanceof HTMLElement) {
+      if (item.priceUsd !== null && item.rate > 0) {
+        sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
+      } else {
+        sypEl.textContent = '—';
+      }
+      const below = !!(item.purchaseUsd && item.priceUsd !== null && item.priceUsd < item.purchaseUsd);
+      sypEl.classList.toggle('is-below-cost', below);
+      if (priceInput instanceof HTMLElement) priceInput.classList.toggle('is-below-cost', below);
+    }
+  }
+
+  function appendTrayItem(item, options = {}) {
+    const animate = !!options.animate && !prefersReducedMotion();
+    const list = document.querySelector('[data-stagnant-tray-list]');
+    if (!(list instanceof HTMLElement) || !item) return;
+    list.querySelector('[data-stagnant-tray-empty]')?.remove();
+    if (list.querySelector('[data-tray-guid="' + item.guid + '"]')) {
+      updateTrayItemPricing(item);
+      return;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'stagnant-candidates-section__row';
+    row.setAttribute('data-tray-guid', item.guid);
+
+    const thumb = document.createElement('div');
+    thumb.className = 'w-16 h-16 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
+    if (item.image) {
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.name;
+      img.loading = 'lazy';
+      img.className = 'w-full h-full object-cover';
+      thumb.appendChild(img);
+    }
+
+    const title = document.createElement('div');
+    title.className = 'min-w-[10rem] flex-1';
+    title.innerHTML = '<div class="text-sm font-bold text-slate-900 leading-snug"></div>'
+      + '<div class="text-[11px] font-mono text-text-muted" dir="ltr"></div>';
+    title.querySelector('div').textContent = item.name;
+    title.querySelectorAll('div')[1].textContent = item.code;
+
+    const pctLabel = document.createElement('label');
+    pctLabel.className = 'text-[11px] font-bold text-slate-600';
+    pctLabel.textContent = 'خصم % ';
+    const pctInput = document.createElement('input');
+    pctInput.type = 'text';
+    pctInput.inputMode = 'decimal';
+    pctInput.autocomplete = 'off';
+    pctInput.className = 'w-[4.5rem] rounded-lg border border-border-subtle px-2 text-sm tabular-nums';
+    pctInput.name = 'material_discount[' + item.guid + ']';
+    pctInput.value = formatPct(item.percent);
+    pctInput.addEventListener('input', () => {
+      const pct = parseLoose(pctInput.value);
+      if (pct === null) return;
+      item.percent = Math.max(0, Math.min(95, pct));
+      if (item.saleUsd && item.saleUsd > 0) {
+        item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+        priceInput.value = formatUsd(item.priceUsd);
+        sypEl.textContent = item.rate > 0
+          ? formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س'
+          : '—';
+        sypEl.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+        priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+      }
+      syncSourceRow(item);
+      persistCandidates();
+    });
+    pctInput.addEventListener('blur', () => {
+      item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
+      pctInput.value = formatPct(item.percent);
+      if (item.saleUsd && item.saleUsd > 0) {
+        item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+        priceInput.value = formatUsd(item.priceUsd);
+      }
+      syncSourceRow(item);
+      persistCandidates();
+    });
+    pctLabel.appendChild(pctInput);
+
+    const priceLabel = document.createElement('label');
+    priceLabel.className = 'text-[11px] font-bold text-slate-600';
+    priceLabel.textContent = 'بعد $ ';
+    const priceInput = document.createElement('input');
+    priceInput.type = 'text';
+    priceInput.inputMode = 'decimal';
+    priceInput.autocomplete = 'off';
+    priceInput.className = 'w-24 rounded-lg border border-border-subtle px-2 text-sm tabular-nums';
+    priceInput.setAttribute('data-tray-price', '');
+    priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
+    priceInput.disabled = !(item.saleUsd > 0);
+    priceInput.addEventListener('input', () => {
+      const after = parseLoose(priceInput.value);
+      if (after === null || !(item.saleUsd > 0)) return;
+      item.priceUsd = Math.max(0, Math.min(item.saleUsd, after));
+      item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+      pctInput.value = formatPct(item.percent);
+      sypEl.textContent = item.rate > 0
+        ? formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س'
+        : '—';
+      const below = !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd);
+      sypEl.classList.toggle('is-below-cost', below);
+      priceInput.classList.toggle('is-below-cost', below);
+      syncSourceRow(item);
+      persistCandidates();
+    });
+    priceInput.addEventListener('blur', () => {
+      if (!(item.saleUsd > 0)) return;
+      item.priceUsd = Math.max(0, Math.min(item.saleUsd, parseLoose(priceInput.value) ?? item.priceUsd ?? 0));
+      priceInput.value = formatUsd(item.priceUsd);
+      item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+      pctInput.value = formatPct(item.percent);
+      syncSourceRow(item);
+      persistCandidates();
+    });
+    priceLabel.appendChild(priceInput);
+
+    const sypEl = document.createElement('span');
+    sypEl.className = 'text-sm font-extrabold tabular-nums text-emerald-800 min-w-[5rem]';
+    sypEl.dir = 'ltr';
+    sypEl.setAttribute('data-tray-syp', '');
+    if (item.priceUsd !== null && item.rate > 0) {
+      sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
+      if (item.purchaseUsd && item.priceUsd < item.purchaseUsd) {
+        sypEl.classList.add('is-below-cost');
+        priceInput.classList.add('is-below-cost');
+      }
+    } else {
+      sypEl.textContent = '—';
+    }
+
+    const guidHidden = document.createElement('input');
+    guidHidden.type = 'hidden';
+    guidHidden.name = 'material_guids[]';
+    guidHidden.value = item.guid;
+
+    // Snapshot of stagnant «كمية» (warehouse primary units). Server ÷ packaging → qty_cap_packages.
+    const qtyHidden = document.createElement('input');
+    qtyHidden.type = 'hidden';
+    qtyHidden.name = 'material_warehouse_qty[' + item.guid + ']';
+    qtyHidden.value = item.warehouseQty !== null && item.warehouseQty !== undefined
+      ? String(item.warehouseQty)
+      : '';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'h-9 px-3 rounded-lg border border-border-subtle text-sm font-bold text-slate-600 hover:bg-slate-50';
+    removeBtn.textContent = 'إزالة';
+    removeBtn.addEventListener('click', () => removeCandidate(item.guid));
+
+    row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, qtyHidden, removeBtn);
+    list.appendChild(row);
+    if (animate) {
+      row.classList.add('is-tray-item-enter');
+      afterAnim(row, TRAY_ANIM_MS, () => {
+        row.classList.remove('is-tray-item-enter');
+      });
+    }
   }
 
   function renderTray() {
@@ -268,135 +810,21 @@
     if (!(list instanceof HTMLElement)) return;
     list.innerHTML = '';
 
-    if (candidates.size === 0) {
+    if (candidateOrder.length === 0) {
       const empty = document.createElement('p');
-      empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
+      empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
       empty.setAttribute('data-stagnant-tray-empty', '');
       empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
       list.appendChild(empty);
+      syncTraySectionChrome();
       return;
     }
 
-    candidates.forEach((item) => {
-      const row = document.createElement('div');
-      row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
-      row.setAttribute('data-tray-guid', item.guid);
-
-      const thumb = document.createElement('div');
-      thumb.className = 'w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
-      if (item.image) {
-        const img = document.createElement('img');
-        img.src = item.image;
-        img.alt = item.name;
-        img.loading = 'lazy';
-        img.className = 'w-full h-full object-cover';
-        thumb.appendChild(img);
-      }
-
-      const title = document.createElement('div');
-      title.className = 'min-w-[10rem] flex-1';
-      title.innerHTML = '<div class="text-sm font-bold text-slate-900 leading-snug"></div>'
-        + '<div class="text-[11px] font-mono text-text-muted" dir="ltr"></div>';
-      title.querySelector('div').textContent = item.name;
-      title.querySelectorAll('div')[1].textContent = item.code;
-
-      const pctLabel = document.createElement('label');
-      pctLabel.className = 'text-[11px] font-bold text-slate-600';
-      pctLabel.textContent = 'خصم % ';
-      const pctInput = document.createElement('input');
-      pctInput.type = 'text';
-      pctInput.inputMode = 'decimal';
-      pctInput.autocomplete = 'off';
-      pctInput.className = 'w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
-      pctInput.name = 'material_discount[' + item.guid + ']';
-      pctInput.value = formatPct(item.percent);
-      pctInput.addEventListener('input', () => {
-        const pct = parseLoose(pctInput.value);
-        if (pct === null) return;
-        item.percent = Math.max(0, Math.min(95, pct));
-        if (item.saleUsd && item.saleUsd > 0) {
-          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
-          priceInput.value = formatUsd(item.priceUsd);
-          sypEl.textContent = item.rate > 0
-            ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
-            : '—';
-          sypEl.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
-          priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
-        }
-        syncSourceRow(item);
-      });
-      pctInput.addEventListener('blur', () => {
-        item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
-        pctInput.value = formatPct(item.percent);
-        if (item.saleUsd && item.saleUsd > 0) {
-          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
-          priceInput.value = formatUsd(item.priceUsd);
-        }
-        syncSourceRow(item);
-      });
-      pctLabel.appendChild(pctInput);
-
-      const priceLabel = document.createElement('label');
-      priceLabel.className = 'text-[11px] font-bold text-slate-600';
-      priceLabel.textContent = 'بعد $ ';
-      const priceInput = document.createElement('input');
-      priceInput.type = 'text';
-      priceInput.inputMode = 'decimal';
-      priceInput.autocomplete = 'off';
-      priceInput.className = 'w-20 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
-      priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
-      priceInput.disabled = !(item.saleUsd > 0);
-      priceInput.addEventListener('input', () => {
-        const after = parseLoose(priceInput.value);
-        if (after === null || !(item.saleUsd > 0)) return;
-        item.priceUsd = Math.max(0, Math.min(item.saleUsd, after));
-        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
-        pctInput.value = formatPct(item.percent);
-        sypEl.textContent = item.rate > 0
-          ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
-          : '—';
-        const below = !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd);
-        sypEl.classList.toggle('is-below-cost', below);
-        priceInput.classList.toggle('is-below-cost', below);
-        syncSourceRow(item);
-      });
-      priceInput.addEventListener('blur', () => {
-        if (!(item.saleUsd > 0)) return;
-        item.priceUsd = Math.max(0, Math.min(item.saleUsd, parseLoose(priceInput.value) ?? item.priceUsd ?? 0));
-        priceInput.value = formatUsd(item.priceUsd);
-        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
-        pctInput.value = formatPct(item.percent);
-        syncSourceRow(item);
-      });
-      priceLabel.appendChild(priceInput);
-
-      const sypEl = document.createElement('span');
-      sypEl.className = 'text-xs font-extrabold tabular-nums text-emerald-800 min-w-[4rem]';
-      sypEl.dir = 'ltr';
-      if (item.priceUsd !== null && item.rate > 0) {
-        sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
-        if (item.purchaseUsd && item.priceUsd < item.purchaseUsd) {
-          sypEl.classList.add('is-below-cost');
-          priceInput.classList.add('is-below-cost');
-        }
-      } else {
-        sypEl.textContent = '—';
-      }
-
-      const guidHidden = document.createElement('input');
-      guidHidden.type = 'hidden';
-      guidHidden.name = 'material_guids[]';
-      guidHidden.value = item.guid;
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
-      removeBtn.textContent = 'إزالة';
-      removeBtn.addEventListener('click', () => removeCandidate(item.guid));
-
-      row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
-      list.appendChild(row);
+    candidateOrder.forEach((guid) => {
+      const item = candidates.get(guid);
+      if (item) appendTrayItem(item, { animate: false });
     });
+    syncTraySectionChrome();
   }
 
   function syncSourceRow(item) {
@@ -543,7 +971,7 @@
     if (index < 0) index = delta > 0 ? -1 : 0;
     const next = rows[index + delta];
     if (next) openPreview(next);
-    else if (activeRow?.hidden) openPreview(rows[0]);
+    else if (activeRow?.hidden && rows.length > 0) openPreview(rows[0]);
   }
 
   function bindPreview(form) {
@@ -621,14 +1049,49 @@
     }
   }
 
+  /**
+   * After SPA page/filter navigation or full reload: keep tray Map (or restore from
+   * sessionStorage), re-render list, and re-hide current-page rows still in the tray.
+   * Only clears when the offer was just saved (saved=1 / clear flag).
+   */
+  function hydrateTrayForCurrentDom(root = document) {
+    if (shouldClearTrayOnEntry(root)) {
+      candidateOrder.length = 0;
+      candidates.clear();
+      clearPersistedCandidates();
+      restoreHiddenMaterialRows(root);
+    } else if (candidates.size === 0) {
+      loadCandidatesFromSession();
+    } else {
+      persistCandidates();
+    }
+    hideRowsForTrayCandidates(root);
+    renderTray();
+    syncSubmitState(root);
+    syncTraySectionChrome();
+    updateNavControls();
+  }
+
   function init(root = document) {
     const form = root.querySelector?.('#stagnant-offer-form') || document.getElementById('stagnant-offer-form');
     if (!form) return;
     if (form.getAttribute(BOUND) === '1') {
-      syncSubmitState(document);
+      if (shouldClearTrayOnEntry(root)) {
+        clearAllCandidates(root);
+      } else {
+        hideRowsForTrayCandidates(root);
+        renderTray();
+      }
+      stashOriginalSubmitLabels(form);
+      resetSavingUi(form);
+      syncSubmitState(root);
+      syncTraySectionChrome();
       return;
     }
     form.setAttribute(BOUND, '1');
+    hydrateTrayForCurrentDom(root);
+    stashOriginalSubmitLabels(form);
+    resetSavingUi(form);
 
     form.addEventListener('click', (event) => {
       const target = event.target;
@@ -645,6 +1108,22 @@
         const row = addBtn.closest('[data-stagnant-card]');
         if (row instanceof HTMLElement) addCandidateFromRow(row);
       }
+    });
+
+    form.addEventListener('submit', (event) => {
+      if (savingOffer) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (candidates.size === 0) {
+        event.preventDefault();
+        return;
+      }
+      const submitter = event.submitter instanceof HTMLButtonElement
+        ? event.submitter
+        : form.querySelector('[data-stagnant-submit]:not([disabled])');
+      setSavingState(form, true, submitter instanceof HTMLButtonElement ? submitter : null);
     });
 
     const defaultDiscount = form.querySelector('[data-stagnant-default-discount]');
@@ -674,17 +1153,50 @@
       }
     });
 
-    document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
-      allRows().forEach((row) => {
-        if (!row.hidden) addCandidateFromRow(row);
+    form.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
+      allRows(false).forEach((row) => {
+        const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+        if (!guid || candidates.has(guid)) return;
+        addCandidateFromRow(row);
       });
     });
-    document.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
-      Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));
+    form.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
+      const list = form.querySelector('[data-stagnant-tray-list]');
+      const trayRows = list
+        ? Array.from(list.querySelectorAll('[data-tray-guid]'))
+        : [];
+      if (trayRows.length === 0 || prefersReducedMotion()) {
+        clearAllCandidates(form);
+        return;
+      }
+      // Animate all candidate rows out together, then clear state once.
+      let remaining = trayRows.length;
+      trayRows.forEach((trayRow) => {
+        if (!(trayRow instanceof HTMLElement)) {
+          remaining -= 1;
+          return;
+        }
+        trayRow.classList.remove('is-tray-item-enter');
+        trayRow.classList.add('is-tray-item-leave');
+        afterAnim(trayRow, TRAY_ANIM_MS, () => {
+          remaining -= 1;
+          if (remaining <= 0) clearAllCandidates(form);
+        });
+      });
     });
 
+    form.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
+      const section = traySection();
+      if (!(section instanceof HTMLElement)) return;
+      const collapsed = section.classList.toggle('is-tray-collapsed');
+      const toggle = section.querySelector('[data-stagnant-tray-toggle]');
+      if (toggle instanceof HTMLButtonElement) {
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+    });
     bindPreview(form);
     applyDefaultDiscount(form);
+    hideRowsForTrayCandidates(form);
     renderTray();
     syncSubmitState(document);
   }
@@ -692,12 +1204,39 @@
   window.portalStagnantInventoryInit = (root = document) => {
     const existing = document.getElementById('stagnant-offer-form');
     if (!existing) return;
-    if (existing.getAttribute(BOUND) !== '1') {
-      init(root);
+    init(root);
+  };
+
+  document.addEventListener('dashboard:ajax-done', (event) => {
+    const detail = event.detail || {};
+    const form = detail.form;
+    const active = document.getElementById('stagnant-offer-form');
+    const isStagnantForm = form instanceof HTMLFormElement && (
+      form.id === 'stagnant-offer-form'
+      || form.hasAttribute('data-stagnant-offer-form')
+    );
+    // Always clear stuck «جاري الحفظ…» after any AJAX finish while this form was saving,
+    // including ok:false / thrown fetchJson errors (HTTP 400).
+    if (isStagnantForm || savingOffer || (active && active.classList.contains('is-saving'))) {
+      resetSavingUi(active || form);
+    }
+    if (!isStagnantForm) {
       return;
     }
-    syncSubmitState(document);
-  };
+    if (detail.ok && detail.redirect) {
+      markOfferSavedForLaterVisit();
+      clearAllCandidates(document);
+    }
+  });
+
+  window.addEventListener('pageshow', (event) => {
+    const form = document.getElementById('stagnant-offer-form');
+    if (!(form instanceof HTMLFormElement)) return;
+    if (event.persisted && shouldClearTrayOnEntry(document)) {
+      clearAllCandidates(document);
+    }
+    resetSavingUi(form);
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => init(document));

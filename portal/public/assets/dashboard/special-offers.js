@@ -8,21 +8,28 @@
 
   window.portalSpecialOffersInit = (root = document) => {
     const form = root.querySelector('#special-offer-form');
-    if (!form || boundRoots.has(form)) {
+    if (!form || !form.isConnected) {
+      return;
+    }
+    // Re-bind when SPA navigation reused a detached form entry in the WeakSet.
+    if (boundRoots.has(form) && form.getAttribute('data-so-js-bound') === '1') {
       return;
     }
     boundRoots.add(form);
+    form.setAttribute('data-so-js-bound', '1');
 
-    const modeSelect = root.querySelector('#selection_mode');
-    const filterPanel = root.querySelector('#filter-mode-panel');
-    const manualPanel = root.querySelector('#manual-mode-panel');
-    const pricingScope = root.querySelector('#pricing_scope');
-    const perMaterialPanel = root.querySelector('#per-material-pricing-panel');
-    const perMaterialRows = root.querySelector('#per-material-pricing-rows');
+    const scope = form;
+    const modeSelect = scope.querySelector('#selection_mode');
+    const filterPanel = scope.querySelector('#filter-mode-panel');
+    const manualPanel = scope.querySelector('#manual-mode-panel');
+    const pricingScope = scope.querySelector('#pricing_scope');
+    const perMaterialPanel = scope.querySelector('#per-material-pricing-panel');
+    const perMaterialRows = scope.querySelector('#per-material-pricing-rows');
 
     const readJson = (id, fallback) => {
-      const node = root.querySelector(id);
-      if (!node) return fallback;
+      // Prefer nodes inside the live form/main so SPA body clones of JSON scripts are ignored.
+      const node = scope.querySelector(id) || root.querySelector(id);
+      if (!node || !node.isConnected) return fallback;
       try {
         return JSON.parse(node.textContent || '') ?? fallback;
       } catch (_) {
@@ -46,9 +53,52 @@
       const meta = labelMapRaw[key] || {};
       labelMap[lower] = { ...meta, guid: lower };
     });
+    // Fill missing qty defaults from warehouse packages so edit/create never opens as «بلا حد».
+    Object.keys(overridesState).forEach((guid) => {
+      const row = overridesState[guid];
+      if (!row || typeof row !== 'object') return;
+      const mode = String(row.qty_mode || '').trim();
+      const meta = labelMap[guid] || {};
+      if (!['unlimited', 'stock', 'fixed'].includes(mode)) {
+        row.qty_mode = 'fixed';
+        if ((row.qty_cap_packages == null || row.qty_cap_packages === '')
+          && meta.availablePackages != null && meta.availablePackages !== '') {
+          row.qty_cap_packages = meta.availablePackages;
+        }
+      } else if (mode === 'fixed'
+        && (row.qty_cap_packages == null || row.qty_cap_packages === '')
+        && meta.availablePackages != null && meta.availablePackages !== '') {
+        row.qty_cap_packages = meta.availablePackages;
+      }
+    });
     const seedGuids = (readJson('#so-manual-material-guids-json', []) || [])
       .map((g) => String(g).toLowerCase())
       .filter(Boolean);
+    // Ensure every seeded material has a qty override so unified/per_material tables show fixed+cap.
+    seedGuids.forEach((guid) => {
+      const meta = labelMap[guid] || {};
+      if (!overridesState[guid]) {
+        overridesState[guid] = {
+          discount_type: 'percent',
+          discount_percent: '',
+          qty_mode: 'fixed',
+          qty_cap_packages: meta.availablePackages != null ? meta.availablePackages : '',
+        };
+        return;
+      }
+      const row = overridesState[guid];
+      const mode = String(row.qty_mode || '').trim();
+      if (!['unlimited', 'stock', 'fixed'].includes(mode)) {
+        row.qty_mode = 'fixed';
+      }
+      if (row.qty_mode === 'fixed'
+        && (row.qty_cap_packages == null || row.qty_cap_packages === '')
+        && meta.availablePackages != null && meta.availablePackages !== '') {
+        row.qty_cap_packages = meta.availablePackages;
+      }
+    });
+    // GUIDs the user explicitly removed — must not reappear via seed JSON / overrides / MutationObserver sync.
+    const removedGuids = new Set();
 
     const roundUpTo5 = (amount) => {
       if (!(amount > 0)) return 0;
@@ -68,28 +118,69 @@
       return 0;
     };
 
+    const isManualMode = () => modeSelect?.value === 'manual';
+    const isPerMaterialMode = () => pricingScope?.value === 'per_material' && isManualMode();
+
+    const applyInvoiceChrome = () => {
+      const priced = isPerMaterialMode();
+      perMaterialPanel?.classList.toggle('so-invoice--unified', !priced);
+      const kicker = scope.querySelector('[data-so-invoice-kicker]');
+      const title = scope.querySelector('[data-so-invoice-title]');
+      const hint = scope.querySelector('[data-so-invoice-hint]');
+      if (kicker) kicker.textContent = priced ? 'فاتورة العرض' : 'مواد العرض';
+      if (title) title.textContent = priced ? 'مواد العرض وأسعارها' : 'المواد المشمولة بالعرض';
+      if (hint) {
+        hint.textContent = priced
+          ? 'الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.'
+          : 'أضف مواداً من البحث أعلاه. الحسم الموحّد من أعلى النموذج يُطبَّق على كل المواد — يمكن ضبط كمية العرض لكل مادة.';
+      }
+      // Unified offer: keep discount inputs out of POST (disabled) so only qty caps submit.
+      perMaterialRows?.querySelectorAll('[data-override-guid]').forEach((row) => {
+        row.querySelectorAll('[data-field="discount_type"], [data-field="discount_percent"], [data-field="sale_after_usd"], [data-field="fixed_amount_syp"], [data-field="fixed_amount_usd"], [data-field="fixed_price_syp"], [data-field="fixed_price_usd"]').forEach((el) => {
+          if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
+            el.disabled = !priced;
+            if (el.getAttribute('data-field') === 'discount_percent') {
+              el.toggleAttribute('required', priced);
+            }
+          }
+        });
+      });
+    };
+
     const syncPanels = () => {
       if (pricingScope?.value === 'per_material' && modeSelect && modeSelect.value !== 'manual') {
         modeSelect.value = 'manual';
       }
-      const isManual = modeSelect?.value === 'manual';
+      const isManual = isManualMode();
       if (!isManual && pricingScope?.value === 'per_material') {
         pricingScope.value = 'offer';
       }
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
-      const perMaterial = pricingScope?.value === 'per_material' && isManual;
-      root.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
-      root.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
-      root.querySelector('[data-picker-id="so-manual-materials"]')?.classList.toggle('hidden', perMaterial);
-      root.querySelectorAll('.so-unified-discount').forEach((el) => {
+      const perMaterial = isPerMaterialMode();
+      scope.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
+      scope.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
+      // Always hide chip chrome in manual mode — the materials table is the UI.
+      const pickerWrap = scope.querySelector('[data-so-manual-picker-wrap]');
+      const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
+      if (pickerWrap) {
+        pickerWrap.classList.add('hidden', 'so-manual-picker--invoice');
+      } else {
+        picker?.classList.add('hidden');
+      }
+      if (picker) {
+        picker.setAttribute('data-suppress-chips', '1');
+        // Clear any chip chrome that painted before suppress was applied.
+        picker.querySelector('[data-role="chips"]')?.replaceChildren();
+      }
+      scope.querySelectorAll('.so-unified-discount').forEach((el) => {
         if (perMaterial) {
           el.classList.add('hidden');
         }
       });
       if (perMaterial) {
         ['#field-percent', '#field-amount-syp', '#field-amount-usd', '#field-syp', '#field-usd', '#offer-discount-type-wrap'].forEach((sel) => {
-          root.querySelector(sel)?.classList.add('hidden');
+          scope.querySelector(sel)?.classList.add('hidden');
         });
       } else {
         syncDiscount();
@@ -98,14 +189,14 @@
     };
     modeSelect?.addEventListener('change', syncPanels);
 
-    const discountType = root.querySelector('#discount_type');
+    const discountType = scope.querySelector('#discount_type');
     const syncDiscount = () => {
       const type = discountType?.value || 'percent';
-      root.querySelector('#field-percent')?.classList.toggle('hidden', type !== 'percent');
-      root.querySelector('#field-amount-syp')?.classList.toggle('hidden', type !== 'fixed_amount');
-      root.querySelector('#field-amount-usd')?.classList.toggle('hidden', type !== 'fixed_amount');
-      root.querySelector('#field-syp')?.classList.toggle('hidden', type !== 'fixed_price');
-      root.querySelector('#field-usd')?.classList.toggle('hidden', type !== 'fixed_price');
+      scope.querySelector('#field-percent')?.classList.toggle('hidden', type !== 'percent');
+      scope.querySelector('#field-amount-syp')?.classList.toggle('hidden', type !== 'fixed_amount');
+      scope.querySelector('#field-amount-usd')?.classList.toggle('hidden', type !== 'fixed_amount');
+      scope.querySelector('#field-syp')?.classList.toggle('hidden', type !== 'fixed_price');
+      scope.querySelector('#field-usd')?.classList.toggle('hidden', type !== 'fixed_price');
     };
     discountType?.addEventListener('change', syncDiscount);
     syncDiscount();
@@ -115,14 +206,42 @@
       perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
         const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
         if (!guid) return;
-        const type = row.querySelector('[data-field="discount_type"]')?.value || 'percent';
+        const prev = overridesState[guid] && typeof overridesState[guid] === 'object'
+          ? overridesState[guid]
+          : {};
+        const type = row.querySelector('[data-field="discount_type"]')?.value || prev.discount_type || 'percent';
+        const qtyModeEl = row.querySelector('[data-field="qty_mode"]');
+        const qtyCapEl = row.querySelector('[data-field="qty_cap_packages"]');
+        const qtyModeFromDom = qtyModeEl instanceof HTMLSelectElement || qtyModeEl instanceof HTMLInputElement
+          ? String(qtyModeEl.value || '').trim()
+          : '';
+        const qtyCapFromDom = qtyCapEl instanceof HTMLInputElement ? String(qtyCapEl.value ?? '') : null;
+        // Never silently fall back to unlimited — that wiped stagnant fixed caps on rebuild.
+        let qtyMode = qtyModeFromDom
+          || String(prev.qty_mode || '').trim()
+          || 'fixed';
+        if (!['unlimited', 'stock', 'fixed'].includes(qtyMode)) {
+          qtyMode = 'fixed';
+        }
+        let qtyCap = qtyCapFromDom !== null ? qtyCapFromDom : String(prev.qty_cap_packages ?? '');
+        if (qtyMode === 'fixed' && (qtyCap === '' || qtyCap == null)) {
+          const meta = labelMap[guid] || {};
+          if (meta.availablePackages != null && meta.availablePackages !== '') {
+            qtyCap = String(meta.availablePackages);
+          } else if (prev.qty_cap_packages != null && prev.qty_cap_packages !== '') {
+            qtyCap = String(prev.qty_cap_packages);
+          }
+        }
         overridesState[guid] = {
           discount_type: type,
-          discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || '',
-          fixed_price_syp: row.querySelector('[data-field="fixed_price_syp"]')?.value || '',
-          fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || '',
-          fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || '',
-          fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || '',
+          discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || prev.discount_percent || '',
+          fixed_price_syp: row.querySelector('[data-field="fixed_price_syp"]')?.value || prev.fixed_price_syp || '',
+          fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || prev.fixed_price_usd || '',
+          fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || prev.fixed_amount_syp || '',
+          fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || prev.fixed_amount_usd || '',
+          qty_mode: qtyMode,
+          qty_cap_packages: qtyCap,
+          is_exhausted: !!(prev.is_exhausted || row.querySelector('.so-invoice__exhausted')),
         };
       });
     };
@@ -131,19 +250,39 @@
       const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
         : [];
-      const fromDom = Array.from(root.querySelectorAll('input[name="manual_material_guids[]"]'))
+      const fromDom = Array.from(scope.querySelectorAll('input[name="manual_material_guids[]"]'))
         .map((input) => String(input.value || '').toLowerCase());
       const fromRows = Array.from(perMaterialRows?.querySelectorAll('[data-override-guid]') || [])
         .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase());
-      return Array.from(new Set(
-        [...fromPicker, ...fromDom, ...fromRows, ...seedGuids, ...Object.keys(overridesState)]
-          .map((g) => String(g || '').toLowerCase())
-          .filter(Boolean)
-      ));
+      // Live sources only for the selected set. seedGuids are applied once when the picker is still empty
+      // (cold edit load) — never merge them on every sync or deleted rows come back after chips→table.
+      const live = [...fromPicker, ...fromDom, ...fromRows, ...Object.keys(overridesState)]
+        .map((g) => String(g || '').toLowerCase())
+        .filter((g) => g && !removedGuids.has(g));
+      const seed = live.length === 0
+        ? seedGuids.filter((g) => g && !removedGuids.has(g))
+        : [];
+      return Array.from(new Set([...live, ...seed]));
+    };
+
+    const removeMaterialGuid = (guid) => {
+      guid = String(guid || '').toLowerCase();
+      if (!guid) return;
+      removedGuids.add(guid);
+      delete overridesState[guid];
+      if (typeof window.portalTokenPickerRemove === 'function') {
+        window.portalTokenPickerRemove('so-manual-materials', guid);
+      }
+      // Drop any leftover hidden inputs the picker registry missed (stale SPA node / casing).
+      scope.querySelectorAll('input[name="manual_material_guids[]"]').forEach((input) => {
+        if (String(input.value || '').toLowerCase() === guid) {
+          input.remove();
+        }
+      });
     };
 
     const ensureSeededSelection = () => {
-      let selected = collectGuidSources();
+      let selected = collectGuidSources().filter((guid) => !removedGuids.has(guid));
       if (selected.length > 0 && typeof window.portalTokenPickerAdd === 'function') {
         const already = new Set(
           (typeof window.portalTokenPickerGetSelected === 'function'
@@ -152,7 +291,7 @@
           ).map((g) => String(g).toLowerCase()).filter(Boolean)
         );
         // Only push missing GUIDs — calling Add with a full rebuild triggers MutationObserver loops.
-        const missing = selected.filter((guid) => !already.has(guid));
+        const missing = selected.filter((guid) => !already.has(guid) && !removedGuids.has(guid));
         if (missing.length > 0) {
           const items = missing.map((guid) => {
             const meta = labelMap[guid] || {};
@@ -167,13 +306,15 @@
           window.portalTokenPickerAdd('so-manual-materials', items);
         }
         const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
-          ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
+          ? window.portalTokenPickerGetSelected('so-manual-materials')
+            .map((g) => String(g).toLowerCase())
+            .filter((g) => g && !removedGuids.has(g))
           : [];
         if (fromPicker.length > 0) {
-          selected = Array.from(new Set(fromPicker.filter(Boolean)));
+          selected = Array.from(new Set(fromPicker));
         }
       }
-      return selected;
+      return selected.filter((guid) => !removedGuids.has(guid));
     };
 
     const renderOverrideRow = (guid, meta, index) => {
@@ -316,8 +457,91 @@
       valueCell.appendChild(valueWrap);
       tr.appendChild(valueCell);
 
+      // Prefer stored override; otherwise default new invoice rows to fixed = current packages.
+      let qtyMode = ['unlimited', 'stock', 'fixed'].includes(String(current.qty_mode || ''))
+        ? String(current.qty_mode)
+        : 'fixed';
+      if (current.qty_mode == null || current.qty_mode === '') {
+        qtyMode = 'fixed';
+        if ((current.qty_cap_packages == null || current.qty_cap_packages === '') && meta.availablePackages != null) {
+          current.qty_cap_packages = meta.availablePackages;
+        }
+      }
+      // Persist defaults into overridesState so rebuild/capture cannot fall back to unlimited.
+      overridesState[guid] = {
+        ...(overridesState[guid] || {}),
+        ...current,
+        qty_mode: qtyMode,
+        qty_cap_packages: current.qty_cap_packages != null && current.qty_cap_packages !== ''
+          ? current.qty_cap_packages
+          : (qtyMode === 'fixed' && meta.availablePackages != null ? meta.availablePackages : (current.qty_cap_packages ?? '')),
+      };
+      const qtyCell = document.createElement('td');
+      qtyCell.className = 'so-invoice__qty';
+      const qtyWrap = document.createElement('div');
+      qtyWrap.className = 'so-invoice__qty-fields';
+      const qtySelect = document.createElement('select');
+      qtySelect.name = `material_override[${guid}][qty_mode]`;
+      qtySelect.setAttribute('data-field', 'qty_mode');
+      qtySelect.className = 'so-invoice__select so-invoice__select--qty';
+      [
+        ['unlimited', 'بلا حد'],
+        ['stock', 'المخزون المتاح'],
+        ['fixed', 'كمية محددة'],
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        option.selected = qtyMode === value;
+        qtySelect.appendChild(option);
+      });
+      qtyWrap.appendChild(qtySelect);
+      const qtyCapBox = document.createElement('label');
+      qtyCapBox.className = 'so-invoice__value-field' + (qtyMode === 'fixed' ? '' : ' hidden');
+      qtyCapBox.setAttribute('data-show-for-qty', 'fixed');
+      const qtyCapCaption = document.createElement('span');
+      qtyCapCaption.className = 'text-text-muted whitespace-nowrap';
+      qtyCapCaption.textContent = 'طرد';
+      const qtyCapInput = document.createElement('input');
+      qtyCapInput.type = 'text';
+      qtyCapInput.inputMode = 'decimal';
+      qtyCapInput.autocomplete = 'off';
+      qtyCapInput.name = `material_override[${guid}][qty_cap_packages]`;
+      qtyCapInput.setAttribute('data-field', 'qty_cap_packages');
+      qtyCapInput.className = 'so-invoice__input';
+      qtyCapInput.placeholder = 'مثلاً 20';
+      qtyCapInput.value = overridesState[guid].qty_cap_packages != null
+        ? String(overridesState[guid].qty_cap_packages)
+        : '';
+      qtyCapBox.append(qtyCapCaption, qtyCapInput);
+      qtyWrap.appendChild(qtyCapBox);
+      if (current.is_exhausted) {
+        const exhausted = document.createElement('span');
+        exhausted.className = 'so-invoice__exhausted';
+        exhausted.textContent = 'نفدت — خرجت من العرض';
+        qtyWrap.appendChild(exhausted);
+      }
+      qtySelect.addEventListener('change', () => {
+        const mode = qtySelect.value || 'fixed';
+        qtyCapBox.classList.toggle('hidden', mode !== 'fixed');
+        overridesState[guid] = {
+          ...(overridesState[guid] || {}),
+          qty_mode: mode,
+          qty_cap_packages: qtyCapInput.value,
+        };
+      });
+      qtyCapInput.addEventListener('input', () => {
+        overridesState[guid] = {
+          ...(overridesState[guid] || {}),
+          qty_mode: qtySelect.value || 'fixed',
+          qty_cap_packages: qtyCapInput.value,
+        };
+      });
+      qtyCell.appendChild(qtyWrap);
+      tr.appendChild(qtyCell);
+
       const sypCell = document.createElement('td');
-      sypCell.className = 'tabular-nums font-extrabold text-emerald-800';
+      sypCell.className = 'tabular-nums font-extrabold text-emerald-800 so-invoice__after';
       sypCell.dir = 'ltr';
       sypCell.setAttribute('data-after-syp', '');
       sypCell.textContent = '—';
@@ -328,13 +552,13 @@
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'so-invoice__remove';
+      removeBtn.setAttribute('data-so-remove-row', '1');
       removeBtn.textContent = 'حذف';
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         tr.remove();
-        delete overridesState[guid];
-        if (typeof window.portalTokenPickerRemove === 'function') {
-          window.portalTokenPickerRemove('so-manual-materials', guid);
-        }
+        removeMaterialGuid(guid);
         syncPerMaterialRows();
       });
       actionCell.appendChild(removeBtn);
@@ -417,30 +641,56 @@
     };
 
     let syncRowsBusy = false;
+    let initialQtySyncDone = false;
     const syncPerMaterialRows = () => {
       if (!perMaterialRows || !perMaterialPanel || syncRowsBusy) return;
       syncRowsBusy = true;
       try {
-        captureOverrideInputs();
-        let selected = ensureSeededSelection();
+        // First pass: do not capture DOM qty (PHP may still show DB-default «بلا حد»).
+        // Apply overridesState defaults (fixed+cap) and rebuild when qty is stale.
+        if (initialQtySyncDone) {
+          captureOverrideInputs();
+        }
+        initialQtySyncDone = true;
+        // Drop overrides for intentionally removed GUIDs before seeding/rebuild.
+        removedGuids.forEach((guid) => {
+          delete overridesState[guid];
+        });
+        let selected = ensureSeededSelection().filter((guid) => !removedGuids.has(guid));
         const existing = Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
           .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
-          .filter(Boolean);
+          .filter((guid) => guid && !removedGuids.has(guid));
 
-        // Never wipe server-rendered invoice rows if seeding still looks empty.
+        // Never wipe server-rendered invoice rows if seeding still looks empty —
+        // but never resurrect intentionally removed GUIDs.
         if (selected.length === 0 && existing.length > 0) {
           selected = existing.slice();
           ensureSeededSelection();
+          selected = selected.filter((guid) => !removedGuids.has(guid));
         }
 
-        const selectedSet = new Set(selected);
-        const existingSet = new Set(existing);
-        const sameGuids = selected.length === existing.length
-          && selected.every((guid) => existingSet.has(guid))
-          && existing.every((guid) => selectedSet.has(guid));
+        // Remove any leftover DOM rows the user deleted before rebuild/early-return.
+        perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
+          const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+          if (guid && removedGuids.has(guid)) {
+            row.remove();
+          }
+        });
 
-        // Rebuild if GUID set changed OR labelMap gained sale/purchase prices after enrich.
+        const selectedSet = new Set(selected);
+        const existingSet = new Set(
+          Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
+            .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
+            .filter(Boolean)
+        );
+        const sameGuids = selected.length === existingSet.size
+          && selected.every((guid) => existingSet.has(guid))
+          && Array.from(existingSet).every((guid) => selectedSet.has(guid));
+
+        // Rebuild if GUID set changed OR labelMap gained sale/purchase prices after enrich
+        // OR qty mode/cap in overridesState disagrees with the server-rendered selects.
         let pricesStale = false;
+        let qtyStale = false;
         if (sameGuids) {
           perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
             const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
@@ -452,18 +702,34 @@
             if (saleAttr !== saleMeta || purchaseAttr !== purchaseMeta) {
               pricesStale = true;
             }
+            const state = overridesState[guid] || {};
+            const qtyModeEl = row.querySelector('[data-field="qty_mode"]');
+            const qtyCapEl = row.querySelector('[data-field="qty_cap_packages"]');
+            const domMode = qtyModeEl instanceof HTMLSelectElement ? String(qtyModeEl.value || '') : '';
+            const stateMode = String(state.qty_mode || '');
+            if (stateMode && domMode && stateMode !== domMode) {
+              qtyStale = true;
+            }
+            if (stateMode === 'fixed') {
+              const domCap = qtyCapEl instanceof HTMLInputElement ? String(qtyCapEl.value ?? '') : '';
+              const stateCap = state.qty_cap_packages != null ? String(state.qty_cap_packages) : '';
+              if (stateCap !== '' && domCap !== stateCap) {
+                qtyStale = true;
+              }
+            }
           });
         }
 
-        const countEl = root.querySelector('#so-invoice-count');
+        const countEl = scope.querySelector('#so-invoice-count');
         const countLabel = selected.length === 0
           ? 'لا مواد'
           : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
         if (countEl) countEl.textContent = countLabel;
 
-        // Keep server-rendered rows when GUID sets and prices already match.
-        if (sameGuids && !pricesStale) {
+        // Keep server-rendered rows when GUID sets, prices, and qty already match.
+        if (sameGuids && !pricesStale && !qtyStale) {
           bindInvoiceRowBehaviors(perMaterialRows);
+          applyInvoiceChrome();
           return;
         }
 
@@ -471,18 +737,21 @@
         if (!selected.length) {
           const empty = document.createElement('tr');
           const cell = document.createElement('td');
-          cell.colSpan = 8;
+          cell.colSpan = 9;
           cell.className = 'so-invoice__empty';
           cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
           empty.appendChild(cell);
           perMaterialRows.appendChild(empty);
+          applyInvoiceChrome();
           return;
         }
         selected.forEach((guid, index) => {
           const key = String(guid).toLowerCase();
+          if (removedGuids.has(key)) return;
           const meta = labelMap[key] || { name: key };
           perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
         });
+        applyInvoiceChrome();
       } finally {
         syncRowsBusy = false;
       }
@@ -496,27 +765,45 @@
         if (!(target instanceof HTMLElement)) return;
         const removeBtn = target.closest('[data-so-remove-row], .so-invoice__remove');
         if (!(removeBtn instanceof HTMLElement)) return;
+        event.preventDefault();
+        event.stopPropagation();
         const row = removeBtn.closest('[data-override-guid]');
         if (!(row instanceof HTMLElement)) return;
         const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
         row.remove();
-        if (guid) delete overridesState[guid];
-        if (guid && typeof window.portalTokenPickerRemove === 'function') {
-          window.portalTokenPickerRemove('so-manual-materials', guid);
-        }
+        if (guid) removeMaterialGuid(guid);
         syncPerMaterialRows();
       });
       rowsRoot.addEventListener('change', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
-        if (target.getAttribute('data-field') !== 'discount_type') return;
+        const field = target.getAttribute('data-field') || '';
         const row = target.closest('[data-override-guid]');
         if (!(row instanceof HTMLElement)) return;
-        const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
-        row.querySelectorAll('[data-show-for]').forEach((el) => {
-          const visible = el.getAttribute('data-show-for') === selected;
-          el.classList.toggle('hidden', !visible);
-        });
+        const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+        if (field === 'discount_type') {
+          const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
+          row.querySelectorAll('[data-show-for]').forEach((el) => {
+            const visible = el.getAttribute('data-show-for') === selected;
+            el.classList.toggle('hidden', !visible);
+          });
+          return;
+        }
+        if (field === 'qty_mode') {
+          const mode = target instanceof HTMLSelectElement ? target.value : 'fixed';
+          row.querySelectorAll('[data-show-for-qty]').forEach((el) => {
+            const visible = el.getAttribute('data-show-for-qty') === mode;
+            el.classList.toggle('hidden', !visible);
+          });
+          if (guid) {
+            const capEl = row.querySelector('[data-field="qty_cap_packages"]');
+            overridesState[guid] = {
+              ...(overridesState[guid] || {}),
+              qty_mode: mode,
+              qty_cap_packages: capEl instanceof HTMLInputElement ? capEl.value : '',
+            };
+          }
+        }
       });
       rowsRoot.addEventListener('input', (event) => {
         const target = event.target;
@@ -567,10 +854,12 @@
     };
 
     const syncPricingScope = () => {
-      const isPerMaterial = pricingScope?.value === 'per_material' && modeSelect?.value === 'manual';
-      perMaterialPanel?.classList.toggle('hidden', !isPerMaterial);
-      if (isPerMaterial) {
+      const isManual = isManualMode();
+      perMaterialPanel?.classList.toggle('hidden', !isManual);
+      applyInvoiceChrome();
+      if (isManual) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     };
     pricingScope?.addEventListener('change', () => {
@@ -580,18 +869,19 @@
       syncPanels();
     });
 
-    // Keep per-material rows in sync when token chips change (debounced; ignore self-writes).
-    const picker = root.querySelector('[data-picker-id="so-manual-materials"]');
+    // Keep table rows in sync when hidden GUID inputs change (debounced; ignore self-writes).
+    const picker = scope.querySelector('[data-picker-id="so-manual-materials"]');
     const hiddenHost = picker?.querySelector('[data-role="hidden-inputs"]');
     if (hiddenHost && typeof MutationObserver !== 'undefined') {
       let observerTimer = null;
       const observer = new MutationObserver(() => {
-        if (syncRowsBusy || pricingScope?.value !== 'per_material') return;
+        if (syncRowsBusy || !isManualMode()) return;
         if (observerTimer) clearTimeout(observerTimer);
         observerTimer = setTimeout(() => {
           observerTimer = null;
-          if (!syncRowsBusy && pricingScope?.value === 'per_material') {
+          if (!syncRowsBusy && isManualMode()) {
             syncPerMaterialRows();
+            applyInvoiceChrome();
           }
         }, 0);
       });
@@ -601,34 +891,42 @@
     syncPanels();
     syncPricingScope();
     bindInvoiceRowBehaviors(perMaterialRows);
-    // Late pass: token picker may finish painting chips after first sync.
+    // Late pass: token picker may finish seeding hidden inputs after first sync.
     window.setTimeout(() => {
-      if (pricingScope?.value === 'per_material') {
+      if (isManualMode()) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     }, 0);
     window.setTimeout(() => {
-      if (pricingScope?.value === 'per_material') {
+      if (isManualMode()) {
         syncPerMaterialRows();
+        applyInvoiceChrome();
       }
     }, 150);
 
     form.addEventListener('submit', (event) => {
-      if (pricingScope?.value !== 'per_material') return;
+      if (!isManualMode()) return;
       const selected = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials')
         : [];
-      if (selected.length > 0) return;
+      const rowCount = perMaterialRows?.querySelectorAll('[data-override-guid]')?.length || 0;
+      if (selected.length > 0 || rowCount > 0) return;
       event.preventDefault();
-      const status = root.querySelector('#so-material-search-status');
-      if (status) status.textContent = 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.';
+      const status = scope.querySelector('#so-material-search-status');
+      if (status) {
+        status.textContent = isPerMaterialMode()
+          ? 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.'
+          : 'اختر مادة واحدة على الأقل في جدول المواد.';
+      }
     });
 
-    const searchInput = root.querySelector('#so-material-search');
-    const resultsEl = root.querySelector('#so-material-search-results');
-    const searchWrap = root.querySelector('#so-material-search-wrap');
-    const statusEl = root.querySelector('#so-material-search-status');
+    const searchInput = scope.querySelector('#so-material-search');
+    const resultsEl = scope.querySelector('#so-material-search-results');
+    const searchWrap = scope.querySelector('#so-material-search-wrap');
+    const statusEl = scope.querySelector('#so-material-search-status');
     if (!searchInput) {
+      // Invoice/pricing UI is already bound above; search is optional when panel absent.
       return;
     }
 
@@ -721,7 +1019,23 @@
       unitSalePriceSyp: item.unitSalePriceSyp ?? item.whole ?? item.Whole ?? null,
       unitPurchasePriceUsd: item.unitPurchasePriceUsd ?? item.endUser ?? item.EndUser ?? null,
       currencyVal: item.currencyVal ?? item.CurrencyVal ?? null,
+      warehouseQuantity: item.warehouseQuantity ?? item.WarehouseQuantity ?? null,
+      packageConversionFactor: item.packageConversionFactor ?? item.PackageConversionFactor ?? null,
+      availablePackages: item.availablePackages ?? null,
     });
+
+    const packagesFromMeta = (meta) => {
+      if (meta?.availablePackages != null && Number.isFinite(Number(meta.availablePackages))) {
+        return Math.max(0, Number(meta.availablePackages));
+      }
+      const warehouse = Number(meta?.warehouseQuantity);
+      const packaging = Number(meta?.packageConversionFactor);
+      if (Number.isFinite(warehouse) && warehouse >= 0) {
+        const factor = Number.isFinite(packaging) && packaging > 0 ? packaging : 1;
+        return Math.max(0, Math.round((warehouse / factor) * 10000) / 10000);
+      }
+      return null;
+    };
 
     const applyLabelMeta = (guid, item) => {
       const prices = pricesFromItem(item || {});
@@ -735,6 +1049,12 @@
         unitSalePriceSyp: prices.unitSalePriceSyp ?? prev.unitSalePriceSyp ?? null,
         unitPurchasePriceUsd: prices.unitPurchasePriceUsd ?? prev.unitPurchasePriceUsd ?? null,
         currencyVal: prices.currencyVal ?? prev.currencyVal ?? null,
+        warehouseQuantity: prices.warehouseQuantity ?? prev.warehouseQuantity ?? null,
+        packageConversionFactor: prices.packageConversionFactor ?? prev.packageConversionFactor ?? null,
+        availablePackages: prices.availablePackages ?? prev.availablePackages ?? packagesFromMeta({
+          warehouseQuantity: prices.warehouseQuantity ?? prev.warehouseQuantity,
+          packageConversionFactor: prices.packageConversionFactor ?? prev.packageConversionFactor,
+        }),
       };
       return labelMap[guid];
     };
@@ -765,6 +1085,7 @@
       if (!item || typeof window.portalTokenPickerAdd !== 'function') return;
       const guid = String(item.value || '').toLowerCase();
       if (!guid) return;
+      removedGuids.delete(guid);
       const normalized = {
         ...item,
         value: guid,
@@ -775,11 +1096,28 @@
       }
       const meta = applyLabelMeta(guid, item);
       if (!overridesState[guid]) {
-        overridesState[guid] = { discount_type: 'percent', discount_percent: '10' };
+        const packages = packagesFromMeta(meta);
+        overridesState[guid] = {
+          discount_type: 'percent',
+          discount_percent: '10',
+          // Default: fixed qty = current warehouse packages (كمية ثابتة = الرصيد الحالي).
+          qty_mode: 'fixed',
+          qty_cap_packages: packages != null ? String(packages) : '',
+        };
+      } else if (!overridesState[guid].qty_mode) {
+        const packages = packagesFromMeta(meta);
+        overridesState[guid] = {
+          ...overridesState[guid],
+          qty_mode: 'fixed',
+          qty_cap_packages: overridesState[guid].qty_cap_packages != null && overridesState[guid].qty_cap_packages !== ''
+            ? overridesState[guid].qty_cap_packages
+            : (packages != null ? String(packages) : ''),
+        };
       }
       const refreshInvoice = () => {
-        if (pricingScope?.value === 'per_material') {
+        if (isManualMode()) {
           syncPerMaterialRows();
+          applyInvoiceChrome();
           perMaterialRows?.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
       };

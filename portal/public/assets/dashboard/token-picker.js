@@ -46,8 +46,17 @@
   };
 
   const initPicker = (picker) => {
+    // Allow re-init when SPA navigation replaces the node but left a stale registry entry.
+    const pickerIdHint = picker.dataset.pickerId || '';
     if (picker.dataset.initialized === '1') {
-      return;
+      if (pickerIdHint !== '' && pickerRegistry.has(pickerIdHint)) {
+        const existing = pickerRegistry.get(pickerIdHint);
+        if (existing?.picker === picker && picker.isConnected) {
+          return;
+        }
+      } else if (picker.isConnected) {
+        return;
+      }
     }
     picker.dataset.initialized = '1';
 
@@ -124,24 +133,30 @@
     const renderSelected = () => {
       chipsHost.innerHTML = '';
       hiddenHost.innerHTML = '';
+      // Invoice/table editors hide the chip chrome; keep GUID hidden inputs only.
+      const suppressChips = picker.classList.contains('so-manual-picker--invoice')
+        || picker.closest('.so-manual-picker--invoice')
+        || picker.getAttribute('data-suppress-chips') === '1';
       for (const value of selectedValues) {
         const option = state.allOptions.find((item) => item.value === value);
         const label = option ? option.label : value;
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs';
-        chip.title = 'حذف';
-        chip.appendChild(document.createTextNode(label + ' '));
-        const remove = document.createElement('span');
-        remove.className = 'text-slate-500';
-        remove.textContent = '×';
-        chip.appendChild(remove);
-        chip.addEventListener('click', () => {
-          selectedValues = selectedValues.filter((item) => item !== value);
-          state.selectedValues = selectedValues;
-          renderSelected();
-        });
-        chipsHost.appendChild(chip);
+        if (!suppressChips) {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs';
+          chip.title = 'حذف';
+          chip.appendChild(document.createTextNode(label + ' '));
+          const remove = document.createElement('span');
+          remove.className = 'text-slate-500';
+          remove.textContent = '×';
+          chip.appendChild(remove);
+          chip.addEventListener('click', () => {
+            selectedValues = selectedValues.filter((item) => item !== value);
+            state.selectedValues = selectedValues;
+            renderSelected();
+          });
+          chipsHost.appendChild(chip);
+        }
 
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'hidden';
@@ -255,7 +270,11 @@
     const state = pickerRegistry.get(pickerId);
     const normalized = normalize(value);
     if (!state || normalized === '') return false;
-    const next = state.selectedValues.filter((item) => item !== normalized);
+    // Case-insensitive so GUID casing from seed JSON vs search-add cannot leave a stale hidden input.
+    const needle = normalized.toLowerCase();
+    const next = state.selectedValues.filter(
+      (item) => normalize(item).toLowerCase() !== needle
+    );
     if (next.length === state.selectedValues.length) return false;
     state.selectedValues = next;
     state.renderSelected?.();

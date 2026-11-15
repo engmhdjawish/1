@@ -15,9 +15,15 @@ use Portal\Support\PriceFx;
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $dbError */
+/** @var array{summary?: array<string, mixed>, materials?: list<array<string, mixed>>}|null $editOfferAnalytics */
 
 require __DIR__ . '/partials/token-picker.php';
 require __DIR__ . '/partials/media-picker.php';
+
+$editOfferAnalytics = is_array($editOfferAnalytics ?? null) ? $editOfferAnalytics : null;
+$fmtInt = static fn ($n): string => number_format((float) $n, 0);
+$fmtMoneyAr = static fn ($n, int $d = 0): string => number_format((float) $n, $d, '.', ',');
+
 
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
@@ -192,7 +198,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       <?php if ($editId !== ''): ?>
         <button type="submit" form="so-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="special-offer-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="special-offer-save-btn" data-dashboard-save-btn data-loading-label="جاري الحفظ…" class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء العرض' ?>
       </button>
     </div>
@@ -432,14 +438,28 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       <p id="so-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pt-8 flex-1"></p>
     </div>
 
-    <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
+    <?php
+      // Manual mode always uses the invoice/materials table — never visible chips.
+      // Token picker stays mounted (hidden) so GUID hidden inputs stay in sync.
+      $showManualInvoice = $selectionMode === 'manual';
+      $invoiceIsPriced = $pricingScope === 'per_material';
+    ?>
+    <div class="hidden so-manual-picker--invoice" data-so-manual-picker-wrap data-suppress-chips="1">
+      <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
+    </div>
 
-    <div id="per-material-pricing-panel" class="so-invoice mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
+    <div id="per-material-pricing-panel" class="so-invoice mt-3<?= $showManualInvoice ? '' : ' hidden' ?><?= $invoiceIsPriced ? '' : ' so-invoice--unified' ?>">
       <div class="so-invoice__head">
         <div>
-          <p class="so-invoice__kicker">فاتورة العرض</p>
-          <h4 class="so-invoice__title">مواد العرض وأسعارها</h4>
-          <p class="so-invoice__hint">الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.</p>
+          <p class="so-invoice__kicker" data-so-invoice-kicker><?= $invoiceIsPriced ? 'فاتورة العرض' : 'مواد العرض' ?></p>
+          <h4 class="so-invoice__title" data-so-invoice-title><?= $invoiceIsPriced ? 'مواد العرض وأسعارها' : 'المواد المشمولة بالعرض' ?></h4>
+          <p class="so-invoice__hint" data-so-invoice-hint>
+            <?php if ($invoiceIsPriced): ?>
+              الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.
+            <?php else: ?>
+              أضف مواداً من البحث أعلاه. الحسم الموحّد من أعلى النموذج يُطبَّق على كل المواد — يمكن ضبط كمية العرض لكل مادة.
+            <?php endif; ?>
+          </p>
         </div>
         <p class="so-invoice__count" id="so-invoice-count">
           <?= $selectedMaterialGuids === [] ? 'لا مواد' : (count($selectedMaterialGuids) === 1 ? 'مادة واحدة' : count($selectedMaterialGuids) . ' مواد') ?>
@@ -454,13 +474,14 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
               <th>مبيع $</th>
               <th>شراء $</th>
               <th class="so-invoice__type-col">نوع الحسم</th>
-              <th>خصم % / سعر $</th>
-              <th>بعد الخصم ل.س</th>
+              <th class="so-invoice__price-col">خصم % / سعر $</th>
+              <th>كمية العرض</th>
+              <th class="so-invoice__after-col">بعد الخصم ل.س</th>
               <th class="so-invoice__action-col"></th>
             </tr>
           </thead>
           <tbody id="per-material-pricing-rows">
-            <?php if ($pricingScope === 'per_material' && $selectedMaterialGuids !== []): ?>
+            <?php if ($showManualInvoice && $selectedMaterialGuids !== []): ?>
               <?php foreach ($selectedMaterialGuids as $idx => $guid): ?>
                 <?php
                   $meta = $manualProductsByGuid[$guid] ?? ['guid' => $guid, 'name' => $guid];
@@ -471,7 +492,9 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                   }
                   $pct = isset($override['discount_percent']) && is_numeric((string) $override['discount_percent'])
                       ? (float) $override['discount_percent']
-                      : 15.0;
+                      : (($editOffer['discount_percent'] ?? null) !== null && is_numeric((string) $editOffer['discount_percent'])
+                          ? (float) $editOffer['discount_percent']
+                          : 15.0);
                   $saleUsd = isset($meta['unitSalePriceUsd']) && is_numeric((string) $meta['unitSalePriceUsd'])
                       ? (float) $meta['unitSalePriceUsd'] : null;
                   $saleSyp = isset($meta['unitSalePriceSyp']) && is_numeric((string) $meta['unitSalePriceSyp'])
@@ -519,7 +542,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                   <td class="tabular-nums font-bold" dir="ltr"><?= $saleUsd !== null ? h(number_format($saleUsd, 2, '.', '')) : '—' ?></td>
                   <td class="tabular-nums text-slate-600" dir="ltr"><?= $purchaseUsd !== null ? h(number_format($purchaseUsd, 2, '.', '')) : '—' ?></td>
                   <td class="so-invoice__type">
-                    <select name="material_override[<?= h($guid) ?>][discount_type]" data-field="discount_type" class="so-invoice__select">
+                    <select name="material_override[<?= h($guid) ?>][discount_type]" data-field="discount_type" class="so-invoice__select"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       <option value="percent" <?= $dtype === 'percent' ? 'selected' : '' ?>>نسبة %</option>
                       <option value="fixed_amount" <?= $dtype === 'fixed_amount' ? 'selected' : '' ?>>مبلغ مقطوع</option>
                       <option value="fixed_price" <?= $dtype === 'fixed_price' ? 'selected' : '' ?>>سعر طرد جديد</option>
@@ -529,31 +552,69 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                     <div class="so-invoice__values">
                       <label class="so-invoice__value-field<?= $dtype === 'percent' ? '' : ' hidden' ?>" data-show-for="percent">
                         <span class="text-text-muted whitespace-nowrap">%</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" required class="so-invoice__input" name="material_override[<?= h($guid) ?>][discount_percent]" data-field="discount_percent" value="<?= h(rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.') ?: '0') ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off"<?= $invoiceIsPriced ? ' required' : '' ?> class="so-invoice__input" name="material_override[<?= h($guid) ?>][discount_percent]" data-field="discount_percent" value="<?= h(rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.') ?: '0') ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                       <label class="so-invoice__value-field<?= $dtype === 'percent' ? '' : ' hidden' ?>" data-show-for="percent">
                         <span class="text-text-muted whitespace-nowrap">بعد $</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input<?= $belowCost ? ' is-below-cost' : '' ?>" data-field="sale_after_usd" value="<?= $afterUsd !== null ? h(number_format($afterUsd, 2, '.', '')) : '' ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input<?= $belowCost ? ' is-below-cost' : '' ?>" data-field="sale_after_usd" value="<?= $afterUsd !== null ? h(number_format($afterUsd, 2, '.', '')) : '' ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                       <label class="so-invoice__value-field<?= $dtype === 'fixed_amount' ? '' : ' hidden' ?>" data-show-for="fixed_amount">
                         <span class="text-text-muted whitespace-nowrap">ل.س</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_syp]" data-field="fixed_amount_syp" value="<?= h((string) ($override['fixed_amount_syp'] ?? '')) ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_syp]" data-field="fixed_amount_syp" value="<?= h((string) ($override['fixed_amount_syp'] ?? '')) ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                       <label class="so-invoice__value-field<?= $dtype === 'fixed_amount' ? '' : ' hidden' ?>" data-show-for="fixed_amount">
                         <span class="text-text-muted whitespace-nowrap">$</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_usd]" data-field="fixed_amount_usd" value="<?= h((string) ($override['fixed_amount_usd'] ?? '')) ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_usd]" data-field="fixed_amount_usd" value="<?= h((string) ($override['fixed_amount_usd'] ?? '')) ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                       <label class="so-invoice__value-field<?= $dtype === 'fixed_price' ? '' : ' hidden' ?>" data-show-for="fixed_price">
                         <span class="text-text-muted whitespace-nowrap">سعر ل.س</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_syp]" data-field="fixed_price_syp" value="<?= h((string) ($override['fixed_price_syp'] ?? ($afterSyp !== null ? (string) $afterSyp : ''))) ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_syp]" data-field="fixed_price_syp" value="<?= h((string) ($override['fixed_price_syp'] ?? ($afterSyp !== null ? (string) $afterSyp : ''))) ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                       <label class="so-invoice__value-field<?= $dtype === 'fixed_price' ? '' : ' hidden' ?>" data-show-for="fixed_price">
                         <span class="text-text-muted whitespace-nowrap">سعر $</span>
-                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_usd]" data-field="fixed_price_usd" value="<?= h((string) ($override['fixed_price_usd'] ?? ($afterUsd !== null ? number_format($afterUsd, 2, '.', '') : ''))) ?>">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_usd]" data-field="fixed_price_usd" value="<?= h((string) ($override['fixed_price_usd'] ?? ($afterUsd !== null ? number_format($afterUsd, 2, '.', '') : ''))) ?>"<?= $invoiceIsPriced ? '' : ' disabled' ?>>
                       </label>
                     </div>
                   </td>
-                  <td class="tabular-nums font-extrabold<?= $belowCost ? ' is-below-cost' : ' text-emerald-800' ?>" dir="ltr" data-after-syp>
+                  <?php
+                    $mpMeta = $manualProductsByGuid[$guid] ?? [];
+                    $qtyMode = trim((string) ($override['qty_mode'] ?? ''));
+                    $qtyCap = $override['qty_cap_packages'] ?? '';
+                    if (!in_array($qtyMode, ['unlimited', 'stock', 'fixed'], true)) {
+                        // Prefer fixed when a package cap was stored (stagnant creates)
+                        // or warehouse packages are known for this material.
+                        if (isset($override['qty_cap_packages']) && is_numeric((string) $override['qty_cap_packages'])) {
+                            $qtyMode = 'fixed';
+                        } elseif (isset($mpMeta['availablePackages']) && is_numeric((string) $mpMeta['availablePackages'])) {
+                            $qtyMode = 'fixed';
+                            $qtyCap = $mpMeta['availablePackages'];
+                        } else {
+                            $qtyMode = 'unlimited';
+                        }
+                    }
+                    $isExhausted = !empty($override['is_exhausted']);
+                    if ($qtyMode === 'fixed' && ($qtyCap === '' || $qtyCap === null)
+                        && isset($mpMeta['availablePackages']) && is_numeric((string) $mpMeta['availablePackages'])) {
+                        $qtyCap = $mpMeta['availablePackages'];
+                    }
+                  ?>
+                  <td class="so-invoice__qty">
+                    <div class="so-invoice__qty-fields">
+                      <select name="material_override[<?= h($guid) ?>][qty_mode]" data-field="qty_mode" class="so-invoice__select so-invoice__select--qty">
+                        <option value="unlimited" <?= $qtyMode === 'unlimited' ? 'selected' : '' ?>>بلا حد</option>
+                        <option value="stock" <?= $qtyMode === 'stock' ? 'selected' : '' ?>>المخزون المتاح</option>
+                        <option value="fixed" <?= $qtyMode === 'fixed' ? 'selected' : '' ?>>كمية محددة</option>
+                      </select>
+                      <label class="so-invoice__value-field<?= $qtyMode === 'fixed' ? '' : ' hidden' ?>" data-show-for-qty="fixed">
+                        <span class="text-text-muted whitespace-nowrap">طرد</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][qty_cap_packages]" data-field="qty_cap_packages" value="<?= h((string) $qtyCap) ?>" placeholder="مثلاً 20">
+                      </label>
+                      <?php if ($isExhausted): ?>
+                        <span class="so-invoice__exhausted">نفدت — خرجت من العرض</span>
+                      <?php endif; ?>
+                    </div>
+                  </td>
+                  <td class="tabular-nums font-extrabold so-invoice__after<?= $belowCost ? ' is-below-cost' : ' text-emerald-800' ?>" dir="ltr" data-after-syp>
                     <?= $afterSyp !== null ? h(number_format($afterSyp, 0)) : '—' ?>
                   </td>
                   <td class="so-invoice__action">
@@ -572,10 +633,24 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   </article>
 
   <?php if ($editId !== ''): ?>
-    <details class="bg-white border border-border-subtle rounded-xl p-3">
-      <summary class="font-bold text-sm cursor-pointer">معاينة (<?= count($previewProducts) ?>)</summary>
+    <?php
+      $previewLoaded = $includeOfferPreview ?? (($_GET['preview'] ?? '') === '1');
+      $previewQuery = $offerTabQuery($offerTab ?? 'active');
+      $previewQuery .= (str_contains($previewQuery, '?') ? '&' : '?') . 'preview=1';
+      // When editing, offerTabQuery already keeps edit=; ensure preview flag is present.
+      if (!str_contains($previewQuery, 'edit=')) {
+          $previewQuery = '/dashboard/special-offers.php?edit=' . rawurlencode($editId)
+              . '&tab=' . rawurlencode((string) ($offerTab ?? 'active'))
+              . '&preview=1';
+      }
+    ?>
+    <details class="bg-white border border-border-subtle rounded-xl p-3"<?= $previewLoaded ? ' open' : '' ?>>
+      <summary class="font-bold text-sm cursor-pointer">معاينة المتجر<?= $previewLoaded ? ' (' . count($previewProducts) . ')' : '' ?></summary>
       <div class="mt-2">
-        <?php if ($previewProducts === []): ?>
+        <?php if (!$previewLoaded): ?>
+          <p class="text-xs text-text-muted mb-2">المعاينة الثقيلة تُحمَّل عند الطلب لتسريع فتح العروض ذات القوائم الكبيرة.</p>
+          <a href="<?= h($previewQuery) ?>" class="inline-flex h-8 px-3 items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تحميل المعاينة</a>
+        <?php elseif ($previewProducts === []): ?>
           <p class="text-xs text-text-muted">لا توجد مواد — تحقق من الفلاتر أو اتصال API.</p>
         <?php else: ?>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -593,6 +668,90 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
         <?php endif; ?>
       </div>
     </details>
+  <?php endif; ?>
+
+  <?php if ($editOfferAnalytics !== null && trim((string) ($editOffer['id'] ?? '')) !== ''): ?>
+    <?php
+      $an = is_array($editOfferAnalytics['summary'] ?? null) ? $editOfferAnalytics['summary'] : [];
+      $anMats = is_array($editOfferAnalytics['materials'] ?? null) ? $editOfferAnalytics['materials'] : [];
+    ?>
+    <article class="so-analytics bg-white border border-border-subtle rounded-xl p-4 mt-4">
+      <div class="flex flex-wrap items-end justify-between gap-2 mb-3">
+        <div>
+          <p class="text-[11px] font-bold text-primary tracking-wide">جدوى العرض</p>
+          <h3 class="font-extrabold text-slate-900 text-base">قياس التفاعل والمبيعات</h3>
+          <p class="text-xs text-text-muted mt-0.5">آخر 90 يوماً للمشاهدات · المبيعات من طلبات مرتبطة بهذا العرض</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">طلبات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['orders'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">طرود مباعة</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['packages'] ?? 0, 1)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">إيراد ل.س</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['revenue_syp'] ?? 0, 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">خصم ممنوح ل.س</div>
+          <div class="text-xl font-extrabold tabular-nums text-amber-800"><?= h($fmtMoneyAr($an['discount_syp'] ?? 0, 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">مشاهدات / صفحات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['page_views'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">إضافة للسلة</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['add_to_cart'] ?? 0)) ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">تحويل طلبات</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= isset($an['conversion_pct']) && $an['conversion_pct'] !== null ? h((string) $an['conversion_pct']) . '%' : '—' ?></div>
+        </div>
+        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
+          <div class="text-[11px] text-text-muted">مواد بيعت</div>
+          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['materials'] ?? 0)) ?></div>
+        </div>
+      </div>
+      <?php if ($anMats !== []): ?>
+        <div class="overflow-auto border border-border-subtle rounded-lg">
+          <table class="w-full text-sm min-w-[640px]">
+            <thead class="bg-surface-low text-text-muted">
+              <tr>
+                <th class="px-3 py-2 text-right font-bold">المادة</th>
+                <th class="px-3 py-2 text-right font-bold">طلبات</th>
+                <th class="px-3 py-2 text-right font-bold">طرود</th>
+                <th class="px-3 py-2 text-right font-bold">إيراد ل.س</th>
+                <th class="px-3 py-2 text-right font-bold">خصم ل.س</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle">
+              <?php foreach ($anMats as $mat): ?>
+                <?php if (!is_array($mat)) continue; ?>
+                <tr>
+                  <td class="px-3 py-2">
+                    <div class="font-bold"><?= h((string) ($mat['material_name_ar'] ?? $mat['material_guid'] ?? '')) ?></div>
+                    <?php if (!empty($mat['material_code'])): ?>
+                      <div class="text-[11px] text-text-muted"><?= h((string) $mat['material_code']) ?></div>
+                    <?php endif; ?>
+                  </td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtInt($mat['orders'] ?? 0)) ?></td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['packages'] ?? 0, 1)) ?></td>
+                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['revenue_syp'] ?? 0, 0)) ?></td>
+                  <td class="px-3 py-2 tabular-nums text-amber-800"><?= h($fmtMoneyAr($mat['discount_syp'] ?? 0, 0)) ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php else: ?>
+        <p class="text-xs text-text-muted">لا مبيعات مرتبطة بهذا العرض بعد.</p>
+      <?php endif; ?>
+    </article>
   <?php endif; ?>
 </form>
 <?php portal_render_token_picker_script(); ?>
@@ -673,7 +832,6 @@ foreach ($offers as $row) {
             <th class="px-4 py-3 text-right font-bold">العرض</th>
             <th class="px-4 py-3 text-right font-bold">الحسم</th>
             <th class="px-4 py-3 text-right font-bold">الوضع</th>
-            <th class="px-4 py-3 text-right font-bold">فلاتر</th>
             <th class="px-4 py-3 text-right font-bold">يدوي</th>
             <th class="px-4 py-3 text-right font-bold">الفترة</th>
             <th class="px-4 py-3 text-right font-bold">الحالة</th>
@@ -682,7 +840,9 @@ foreach ($offers as $row) {
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($visibleOffers as $row): ?>
-            <?php $lifecycle = (string) ($row['_lifecycle'] ?? 'paused'); ?>
+            <?php
+              $lifecycle = (string) ($row['_lifecycle'] ?? 'paused');
+            ?>
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-3">
                 <div class="font-bold"><?= h((string) ($row['title_ar'] ?? '')) ?></div>
@@ -700,7 +860,6 @@ foreach ($offers as $row) {
                 <?= $rowDiscountLabel ?>
               </td>
               <td class="px-4 py-3 text-xs"><?= ($row['selection_mode'] ?? '') === 'manual' ? 'يدوي' : 'فلترة' ?></td>
-              <td class="px-4 py-3"><?= (int) ($row['filters_count'] ?? 0) ?></td>
               <td class="px-4 py-3"><?= (int) ($row['products_count'] ?? 0) ?></td>
               <td class="px-4 py-3 text-xs whitespace-nowrap">
                 <?= h(substr((string) ($row['starts_at'] ?? ''), 0, 10)) ?> — <?= !empty($row['ends_at']) ? h(substr((string) $row['ends_at'], 0, 10)) : '∞' ?>

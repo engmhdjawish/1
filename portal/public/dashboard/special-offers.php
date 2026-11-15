@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
+use Portal\Services\SpecialOfferAnalyticsService;
 use Portal\Services\SpecialOfferService;
 use Portal\Support\DashboardHttp;
 
@@ -199,20 +200,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $dbError = null;
 $stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
+$offers = [];
+$editOfferAnalytics = null;
 try {
     $stats = SpecialOfferService::stats();
+    // adminList is counts-only (no preview products / API material batch).
     $offers = SpecialOfferService::adminList();
 } catch (\Throwable $e) {
     $offers = [];
-    $dbError = 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.';
+    $errMsg = $e->getMessage();
+    // Migration hint only when the core offers tables/relations are named in the error.
+    $looksLikeMissingOffersSchema = (bool) preg_match(
+        '/special_offers|special_offer_products/i',
+        $errMsg
+    );
+    $dbError = $looksLikeMissingOffersSchema
+        ? 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.'
+        : ('تعذر تحميل العروض: ' . $errMsg);
 }
 
+// Do NOT load per-offer analytics on the list page — visitor_logs engagement was N+1
+// and blocked /dashboard/special-offers.php with ~10 offers. Metrics load on edit only.
+
 $editOffer = null;
+$includeOfferPreview = (($_GET['preview'] ?? '') === '1');
+$materialFilterOptions = ['materialTypes' => [], 'ageCategories' => [], 'manufacturers' => [], 'sizeRanges' => [], 'countryOfOrigins' => [], 'stores' => [], 'groups' => []];
+$materialFilterOptionsError = null;
 if ($editId !== '') {
-    $editOffer = SpecialOfferService::getById($editId);
+    $editOffer = SpecialOfferService::getById($editId, ['include_preview' => $includeOfferPreview]);
     if ($editOffer === null) {
         $editId = '';
         $showForm = $isNew;
+    } else {
+        try {
+            $editOfferAnalytics = SpecialOfferAnalyticsService::detailForOffer($editId);
+        } catch (\Throwable) {
+            $editOfferAnalytics = null;
+        }
     }
 }
 if ($showForm && $editOffer === null) {
@@ -245,26 +269,27 @@ if ($showForm && $editOffer === null) {
     ];
 }
 
-$materialFilterOptions = ['materialTypes' => [], 'ageCategories' => [], 'manufacturers' => [], 'sizeRanges' => [], 'countryOfOrigins' => [], 'stores' => [], 'groups' => []];
-$materialFilterOptionsError = null;
-try {
-    $filtersResponse = ApiClient::get('/api/materials/filter-options');
-    if ($filtersResponse['ok']) {
-        $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
-        $materialFilterOptions = [
-            'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
-            'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
-            'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
-            'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
-            'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
-            'stores' => array_values(array_filter(is_array($data['stores'] ?? null) ? $data['stores'] : ($data['Stores'] ?? []), static fn ($r) => is_array($r))),
-            'groups' => array_values(array_filter(is_array($data['groups'] ?? null) ? $data['groups'] : ($data['Groups'] ?? []), static fn ($r) => is_array($r))),
-        ];
-    } else {
-        $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API.';
+// Filter-options API is only needed when the edit/create form is open.
+if ($showForm) {
+    try {
+        $filtersResponse = ApiClient::get('/api/materials/filter-options');
+        if ($filtersResponse['ok']) {
+            $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+            $materialFilterOptions = [
+                'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
+                'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
+                'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
+                'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
+                'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
+                'stores' => array_values(array_filter(is_array($data['stores'] ?? null) ? $data['stores'] : ($data['Stores'] ?? []), static fn ($r) => is_array($r))),
+                'groups' => array_values(array_filter(is_array($data['groups'] ?? null) ? $data['groups'] : ($data['Groups'] ?? []), static fn ($r) => is_array($r))),
+            ];
+        } else {
+            $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API.';
+        }
+    } catch (\Throwable $e) {
+        $materialFilterOptionsError = $e->getMessage();
     }
-} catch (\Throwable $e) {
-    $materialFilterOptionsError = $e->getMessage();
 }
 
 $currentRoute = '/dashboard/special-offers.php';

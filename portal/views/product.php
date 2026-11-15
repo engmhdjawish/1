@@ -115,12 +115,22 @@ $specs = array_filter([
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
+<?php
+  $productOfferSlugAttr = trim((string) ($product['offer_slug'] ?? ''));
+  if ($productOfferSlugAttr === '' && is_array($offer)) {
+      $productOfferSlugAttr = trim((string) ($offer['slug'] ?? ''));
+  }
+  if ($productOfferSlugAttr === '') {
+      $productOfferSlugAttr = trim((string) ($offerSlug ?? ''));
+  }
+?>
 <article
   class="store-product-detail"
   data-analytics-product="1"
   data-product-guid="<?= h($guid) ?>"
   data-product-code="<?= h($materialCode) ?>"
   data-product-name="<?= h($productName) ?>"
+  <?php if ($productOfferSlugAttr !== ''): ?>data-offer-slug="<?= h($productOfferSlugAttr) ?>"<?php endif; ?>
   data-analytics-label="<?= h('عرض صنف: ' . $productName . ($materialCode !== '' ? ' (' . $materialCode . ')' : '')) ?>"
 >
   <div class="store-product-detail__layout">

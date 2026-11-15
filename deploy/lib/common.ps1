@@ -208,6 +208,22 @@ function Copy-PortalTree {
             New-Item -ItemType Directory -Path $p -Force | Out-Null
         }
     }
+    # Bundle SQL migrations inside the publish tree (same as Linux copy_portal_tree).
+    $docsSource = Join-Path $script:RepoRoot 'docs'
+    if (Test-Path $docsSource) {
+        Write-Step "Copying docs (SQL migrations) to $Destination\docs"
+        $docsDest = Join-Path $Destination 'docs'
+        if (-not (Test-Path $docsDest)) {
+            New-Item -ItemType Directory -Path $docsDest -Force | Out-Null
+        }
+        robocopy $docsSource $docsDest /MIR /NFL /NDL /NJH /NJS /NC /NS | Out-Null
+        if ($LASTEXITCODE -ge 8) {
+            throw "docs copy failed (robocopy exit $LASTEXITCODE)"
+        }
+        Write-Ok 'docs copied'
+    } else {
+        Write-Warn "docs folder missing: $docsSource — migrations may fail"
+    }
     Write-Ok 'Portal files copied'
 }
 

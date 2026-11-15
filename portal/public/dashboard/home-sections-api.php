@@ -51,6 +51,23 @@ $mapMaterialRow = static function (array $row) use ($nullableNumber): ?array {
         $row['unitPurchasePriceUsd'] ?? $row['UnitPurchasePriceUsd'] ?? $row['endUser'] ?? $row['EndUser'] ?? null
     );
     $currencyVal = $nullableNumber($row['currencyVal'] ?? $row['CurrencyVal'] ?? null);
+    $warehouseQty = $nullableNumber(
+        $row['warehouseQuantity'] ?? $row['WarehouseQuantity'] ?? $row['warehouse_quantity'] ?? null
+    );
+    $packaging = $nullableNumber(
+        $row['packageConversionFactor']
+        ?? $row['PackageConversionFactor']
+        ?? $row['unit2Fact']
+        ?? $row['Unit2Fact']
+        ?? $row['packaging']
+        ?? null
+    );
+    if ($packaging === null || $packaging <= 0) {
+        $packaging = 1.0;
+    }
+    $availablePackages = $warehouseQty !== null
+        ? max(0.0, round($warehouseQty / $packaging, 4))
+        : null;
 
     return [
         'value' => $guid,
@@ -62,6 +79,9 @@ $mapMaterialRow = static function (array $row) use ($nullableNumber): ?array {
         'unitSalePriceSyp' => $saleSyp,
         'unitPurchasePriceUsd' => $purchaseUsd,
         'currencyVal' => $currencyVal,
+        'warehouseQuantity' => $warehouseQty,
+        'packageConversionFactor' => $packaging,
+        'availablePackages' => $availablePackages,
         'half' => $saleUsd,
         'whole' => $saleSyp,
         'endUser' => $purchaseUsd,

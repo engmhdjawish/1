@@ -395,24 +395,42 @@ body.dashboard-app {
 button.is-loading,
 [type="submit"].is-loading {
   position: relative;
-  color: transparent !important;
   pointer-events: none;
   opacity: 0.85;
+}
+/* Keep Arabic loading label visible when data-loading-label is set; otherwise spinner-only. */
+.dashboard-btn.is-loading:not([data-loading-label]),
+button.is-loading:not([data-loading-label]),
+[type="submit"].is-loading:not([data-loading-label]) {
+  color: transparent !important;
 }
 .dashboard-btn.is-loading::after,
 button.is-loading::after,
 [type="submit"].is-loading::after {
   content: '';
   position: absolute;
-  inset: 0;
-  margin: auto;
+  inset-inline-start: 0.55rem;
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
   width: 1.1rem;
   height: 1.1rem;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 9999px;
   animation: dash-spin 0.65s linear infinite;
+  color: currentColor;
+}
+.dashboard-btn.is-loading:not([data-loading-label])::after,
+button.is-loading:not([data-loading-label])::after,
+[type="submit"].is-loading:not([data-loading-label])::after {
+  inset: 0;
+  margin: auto;
   color: #fff;
+}
+button.is-loading[data-loading-label],
+[type="submit"].is-loading[data-loading-label] {
+  padding-inline-start: 2rem;
 }
 
 /* Unified dashboard cards (accounting + legacy pages) */
@@ -2279,6 +2297,17 @@ button.is-loading::after,
   overflow: hidden;
 }
 
+/* Unified (offer-level) discount: list materials + qty, hide per-row pricing columns */
+.so-invoice--unified .so-invoice__type-col,
+.so-invoice--unified .so-invoice__type,
+.so-invoice--unified .so-invoice__price-col,
+.so-invoice--unified .so-invoice__value,
+.so-invoice--unified .so-invoice__after-col,
+.so-invoice--unified .so-invoice__after,
+.so-invoice--unified td[data-after-syp] {
+  display: none;
+}
+
 .so-invoice__head {
   display: flex;
   justify-content: space-between;
@@ -2462,6 +2491,28 @@ button.is-loading::after,
   color: #78716c;
 }
 
+.so-invoice__qty-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 7.5rem;
+}
+
+.so-invoice__select--qty {
+  min-width: 7.5rem;
+}
+
+.so-invoice__exhausted {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.4rem;
+}
+
 .so-invoice__remove {
   height: 2rem;
   padding: 0 0.55rem;
@@ -2564,7 +2615,164 @@ button.is-loading::after,
   color: #9a3412;
 }
 
-/* Stagnant inventory — large preview above sticky offer bar */
+/* Stagnant inventory — in-page candidates section (after table, not a fixed overlay) */
+.stagnant-candidates-section {
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.stagnant-candidates-section__toolbar {
+  flex-shrink: 0;
+  padding: 1rem 1.15rem 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--dash-border, #e5e7eb) 65%, transparent);
+  background: color-mix(in srgb, #f8fafc 50%, #fff);
+}
+
+.stagnant-candidates-section__list-wrap {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.15rem 1.15rem;
+  gap: 0.65rem;
+}
+
+/* Keep toolbar + candidates header/toggle visible; only the list body collapses. */
+.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__list {
+  display: none;
+}
+
+.stagnant-candidates-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.stagnant-candidates-section__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.stagnant-candidates-section__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+  color: #475569;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.stagnant-candidates-section__toggle:hover {
+  background: #f8fafc;
+  border-color: color-mix(in srgb, var(--dash-border, #e5e7eb) 55%, #94a3b8);
+}
+
+.stagnant-candidates-section__toggle .material-symbols-outlined {
+  font-size: 1.35rem;
+  transition: transform 0.2s ease;
+}
+
+.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__toggle .material-symbols-outlined {
+  transform: rotate(180deg);
+}
+
+.stagnant-candidates-section__list,
+[data-stagnant-tray-list].stagnant-candidates-section__list {
+  border-radius: 0.75rem;
+  border: 1px dashed var(--dash-border, #e5e7eb);
+  background: color-mix(in srgb, #f8fafc 85%, #fff);
+  min-height: 4.5rem;
+}
+
+.stagnant-candidates-section__list > [data-tray-guid],
+[data-stagnant-tray-list] > [data-tray-guid] {
+  scroll-margin-block: 0.75rem;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row {
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 1fr) auto auto auto auto;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row:last-child {
+  border-bottom: none;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row input[type="text"] {
+  height: 2.25rem;
+}
+
+@media (max-width: 900px) {
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "thumb title"
+      "pct pct"
+      "price price"
+      "syp syp"
+      "remove remove";
+    padding: 1rem;
+    gap: 0.65rem 1rem;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(1) {
+    grid-area: thumb;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(2) {
+    grid-area: title;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(3) {
+    grid-area: pct;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(4) {
+    grid-area: price;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(5) {
+    grid-area: syp;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(8) {
+    grid-area: remove;
+    justify-self: start;
+  }
+}
+
+/* Stagnant inventory — large preview modal */
 .stagnant-preview-modal {
   position: fixed;
   inset: 0;
@@ -2865,4 +3073,146 @@ button.is-loading::after,
   color: #b91c1c !important;
   border-color: #f87171;
   background: #fef2f2;
+}
+
+/* Candidates are removed from the materials table (row.hidden); keep rules as safety net. */
+.stagnant-card[data-stagnant-in-tray="1"],
+.stagnant-card.is-in-tray {
+  display: none !important;
+}
+
+/* Add/remove tray motion — no scroll jump; respect reduced motion. */
+.stagnant-card.is-tray-leaving {
+  animation: stagnant-card-out 0.22s ease forwards;
+  pointer-events: none;
+}
+
+.stagnant-card.is-tray-entering {
+  animation: stagnant-card-in 0.24s ease;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row.is-tray-item-enter {
+  animation: stagnant-tray-in 0.26s ease;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row.is-tray-item-leave {
+  animation: stagnant-tray-out 0.2s ease forwards;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+@keyframes stagnant-card-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes stagnant-card-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes stagnant-tray-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stagnant-tray-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagnant-card.is-tray-leaving,
+  .stagnant-card.is-tray-entering,
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row.is-tray-item-enter,
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row.is-tray-item-leave {
+    animation: none !important;
+  }
+}
+
+.stagnant-tray-badge[hidden] {
+  display: none !important;
+}
+
+.stagnant-offer-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-width: 11rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.55rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stagnant-offer-chip:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+}
+
+.stagnant-offer-chip__title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stagnant-offer-chip__meta {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.stagnant-offer-chip--active {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+.stagnant-offer-chip--active .stagnant-offer-chip__meta {
+  color: #047857;
+}
+
+.stagnant-offer-chip--paused {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.stagnant-offer-chip--paused .stagnant-offer-chip__meta {
+  color: #b45309;
+}
+
+.stagnant-offer-chip--ended {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  opacity: 0.85;
+}
+
+.stagnant-offer-chip--ended .stagnant-offer-chip__meta {
+  color: #9a3412;
 }

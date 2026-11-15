@@ -113,7 +113,19 @@ copy_portal_tree() {
     --exclude 'storage/material-image-worker/' \
     --exclude 'vendor/' \
     --exclude '.git/' \
+    --exclude 'docs/' \
     "$src/" "$dest/"
+  # Bundle SQL migrations inside the publish tree so run-migrations.php finds them
+  # even when PORTAL_REPO_DOCS_PATH still points at an old/missing path in .env.
+  local docs_src="${PORTAL_DOCS_SOURCE_DIR:-$REPO_ROOT/docs}"
+  if [[ -d "$docs_src" ]]; then
+    step "نسخ docs (ترحيلات SQL) إلى $dest/docs"
+    mkdir -p "$dest/docs"
+    rsync -a --delete "$docs_src/" "$dest/docs/"
+    ok "تم نسخ docs"
+  else
+    warn "مجلد docs غير موجود: $docs_src — قد تفشل الترحيلات"
+  fi
   mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts" "$dest/storage/zip-jobs" "$dest/storage/branding" "$dest/storage/share-cards"
   chmod -R u+rwX,g+rwX "$dest/storage" 2>/dev/null || true
   chown -R www-data:www-data "$dest/storage" 2>/dev/null || true
@@ -150,7 +162,7 @@ PORTAL_SESSION_NAME=${PORTAL_SESSION_NAME:-portal_session}
 PORTAL_STORAGE_PATH=${PORTAL_STORAGE_PATH:-}
 PORTAL_PHP_CLI_BIN=${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}
 PORTAL_ZIP_X_ACCEL=${PORTAL_ZIP_X_ACCEL:-1}
-PORTAL_REPO_DOCS_PATH=${PORTAL_REPO_DOCS_PATH:-../docs}
+PORTAL_REPO_DOCS_PATH=${PORTAL_REPO_DOCS_PATH:-docs}
 PORTAL_DETAILS_FONT_PATH=${PORTAL_DETAILS_FONT_PATH:-}
 EOF
   chmod 600 "$env_file"

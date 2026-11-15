@@ -6,8 +6,10 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
+use Portal\Services\SpecialOfferService;
 use Portal\Services\StagnantInventoryService;
 use Portal\Services\StoreSeasonService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('special_offers.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -105,6 +107,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         $perMaterialPercents[$guid] = (float) $pct;
     }
+    // Stagnant «كمية» / data-qty is warehouse primary units (pairs), not packages (طرود).
+    // Accept both field names for compatibility with older tray markup.
+    $rawWarehouseQty = is_array($_POST['material_warehouse_qty'] ?? null)
+        ? $_POST['material_warehouse_qty']
+        : (is_array($_POST['material_qty_packages'] ?? null) ? $_POST['material_qty_packages'] : []);
+    $perMaterialWarehouseQty = [];
+    foreach ($rawWarehouseQty as $guid => $qty) {
+        $guid = strtolower(trim((string) $guid));
+        if ($guid === '' || !is_numeric($qty)) {
+            continue;
+        }
+        $perMaterialWarehouseQty[$guid] = (float) $qty;
+    }
     try {
         $result = StagnantInventoryService::createOfferFromSelection(
             $selectedGuids,
@@ -112,7 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $discountPercent,
             $titleAr,
             $userId,
-            $asDraft
+            $asDraft,
+            $perMaterialWarehouseQty
         );
     } catch (\Throwable $e) {
         $result = [
@@ -128,11 +144,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         if ($asDraft) {
             $editUrl .= '&draft=1';
         }
+        $okMessage = $asDraft
+            ? 'تم حفظ مسودة العرض.'
+            : 'تم تفعيل العرض.';
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json(true, $okMessage, ['redirect' => $editUrl]);
+        }
         header('Location: ' . $editUrl);
         exit;
     }
     $flash = $result['message'] ?? 'تعذر إنشاء العرض.';
     $flashType = 'error';
+    if (DashboardHttp::wantsJson()) {
+        DashboardHttp::json(false, (string) $flash);
+    }
 }
 
 $materialFilterOptions = [
@@ -193,6 +218,23 @@ $totalCount = (int) ($report['totalCount'] ?? 0);
 $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
 $page = (int) ($report['page'] ?? $page);
 $pageSize = (int) ($report['pageSize'] ?? $pageSize);
+
+$offerMembershipByGuid = [];
+try {
+    $pageGuids = [];
+    foreach (is_array($report['items'] ?? null) ? $report['items'] : [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
+        if ($guid !== '') {
+            $pageGuids[] = $guid;
+        }
+    }
+    $offerMembershipByGuid = SpecialOfferService::membershipForMaterials($pageGuids);
+} catch (\Throwable) {
+    $offerMembershipByGuid = [];
+}
 
 $currentRoute = '/dashboard/stagnant-inventory.php';
 ob_start();

@@ -112,7 +112,8 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 - **`PORTAL_DB_SETUP=migrate`**: ترحيلات DB فقط؛ **`.env` في مجلد النشر يُحفظ** (لا يُستبدل من `deploy.env` عند migrate).
-- **`publish.sh`**: ينسخ `portal/` إلى `PORTAL_PUBLISH_DIR` (من `deploy.env`)، `composer install --no-dev`، `run-migrations.php`، `check-environment.php`، ويبني CSS إن وُجد `npm`.
+- **`publish.sh`**: ينسخ `portal/` + `docs/` (ترحيلات SQL) إلى `PORTAL_PUBLISH_DIR` (من `deploy.env`)، `composer install --no-dev`، `run-migrations.php`، `check-environment.php`، ويبني CSS إن وُجد `npm`.
+- ترحيل كميات العرض (`031-offer-qty-caps-and-analytics.sql` → أعمدة `qty_mode` / `qty_cap_packages`): يُطبَّق عبر نفس الأمر أعلاه بعد سحب الفرع الذي يضمّه في قائمة `portal/scripts/run-migrations.php`.
 
 **رسالة `cannot delete non-empty directory: storage/cache`:**  
 `rsync --delete` حاولت محاذاة مجلد cache مع Git (فارغ/غير موجود) و**فشل الحذف** — **الكاش على السيرفر لم يُمسح**. في الإصدارات الأحدث من السكربت يُستثنى `storage/cache` (و`zip-jobs` و`material-image-worker`) من المزامنة.

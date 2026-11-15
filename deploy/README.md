@@ -159,6 +159,14 @@ php scripts/run-migrations.php --list # عرض القائمة
 ```
 
 الترحيلات في `docs/portal-migrations/` + ملفات مستقلة. يُسجَّل ما طُبِّق في جدول `portal_schema_migrations`.
+القائمة الفعلية التي يطبّقها `run-migrations.php` موجودة في مصفوفة `$ordered` داخل السكربت (مع شبكة أمان تُلحق أي ملف `NNN-*.sql` نُسي من القائمة).
+`publish.sh` ينسخ `docs/` إلى مجلد النشر حتى يجد الترحيل الملفات حتى لو بقي `PORTAL_REPO_DOCS_PATH` قديماً في `.env`.
+
+لإنشاء أعمدة كمية العرض (`qty_mode` …) بعد سحب الفرع:
+
+```bash
+cd /opt/jawish && git pull && PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh
+```
 
 ---
 

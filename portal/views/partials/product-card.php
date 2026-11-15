@@ -42,12 +42,13 @@ $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
 
-$contextOffer = null;
-if ($productOfferSlug !== null) {
-    $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
-}
 $guid = material_guid($item);
+// Catalog pages already apply offer pricing in batch; skip a per-card DB lookup.
 if ($guid !== '' && empty($item['has_offer'])) {
+    $contextOffer = null;
+    if ($productOfferSlug !== null) {
+        $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
+    }
     $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
     if (!empty($overlay['has_offer'])) {
         $item = array_merge($item, $overlay);
@@ -76,6 +77,10 @@ if ($hideUnavailablePrice) {
 }
 $hasOffer = !empty($item['has_offer']);
 $offerBadge = trim((string) ($item['offer_badge'] ?? ''));
+$offerSlugAttr = trim((string) ($item['offer_slug'] ?? ''));
+if ($offerSlugAttr === '' && is_array($item['offer'] ?? null)) {
+    $offerSlugAttr = trim((string) ($item['offer']['slug'] ?? ''));
+}
 $cartItems = $allowCart
     ? ($shareTokenActive ? ShareCartService::items($shareToken) : StoreCartService::items())
     : [];
@@ -107,6 +112,7 @@ $previewJson = $previewPayload !== null
 <article
   class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?><?= $comingSoonCard ? ' store-product-card--soon' : '' ?>"
   <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
+  <?php if ($offerSlugAttr !== ''): ?>data-offer-slug="<?= h($offerSlugAttr) ?>"<?php endif; ?>
   <?php if ($useImagePreview && $guid !== ''): ?>
     data-store-preview-card
     data-preview-guid="<?= h($guid) ?>"

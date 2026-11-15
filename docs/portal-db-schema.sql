@@ -266,7 +266,13 @@ CREATE TABLE special_offer_products (
     fixed_price_usd NUMERIC(18, 4),
     fixed_amount_syp NUMERIC(18, 4),
     fixed_amount_usd NUMERIC(18, 4),
-    PRIMARY KEY (offer_id, material_guid)
+    qty_mode         VARCHAR(20) NOT NULL DEFAULT 'unlimited', -- unlimited | stock | fixed
+    qty_cap_packages NUMERIC(18, 4),
+    is_exhausted     BOOLEAN NOT NULL DEFAULT FALSE,
+    exhausted_at     TIMESTAMPTZ,
+    PRIMARY KEY (offer_id, material_guid),
+    CONSTRAINT chk_special_offer_products_qty_mode
+        CHECK (qty_mode IN ('unlimited', 'stock', 'fixed'))
 );
 
 -- ---------------------------------------------------------------------------
