@@ -2604,7 +2604,80 @@ button.is-loading[data-loading-label],
   color: #9a3412;
 }
 
-/* Stagnant inventory — large preview above sticky offer bar */
+/* Stagnant inventory — fixed bottom candidates dock (table stays put) */
+:root {
+  --stagnant-dock-height: min(42vh, 26rem);
+}
+
+.stagnant-candidates-dock-spacer {
+  height: var(--stagnant-dock-height);
+  pointer-events: none;
+}
+
+.stagnant-candidates-dock {
+  position: fixed;
+  z-index: 100090;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  height: var(--stagnant-dock-height);
+  max-height: var(--stagnant-dock-height);
+  border-top: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 1rem 1rem 0 0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -10px 36px rgba(15, 23, 42, 0.14);
+  padding:
+    0.65rem 0.85rem
+    max(0.65rem, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .stagnant-candidates-dock {
+    inset-inline-end: var(--dash-sidebar, 16rem);
+  }
+}
+
+body.dashboard-app.has-bottom-nav .stagnant-candidates-dock {
+  bottom: calc(var(--dash-bottom-nav, 5rem) + env(safe-area-inset-bottom, 0px));
+}
+
+.stagnant-candidates-dock__toolbar {
+  flex-shrink: 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--dash-border, #e5e7eb) 65%, transparent);
+}
+
+.stagnant-candidates-dock__list-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.5rem;
+}
+
+.stagnant-candidates-dock__list,
+[data-stagnant-tray-list].stagnant-candidates-dock__list {
+  flex: 1;
+  min-height: 2.75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 0.75rem;
+  border: 1px dashed var(--dash-border, #e5e7eb);
+  background: color-mix(in srgb, #f8fafc 85%, #fff);
+  scroll-padding-block: 0.5rem;
+}
+
+.stagnant-candidates-dock__list > [data-tray-guid],
+[data-stagnant-tray-list] > [data-tray-guid] {
+  scroll-margin-block: 0.25rem;
+}
+
+/* Stagnant inventory — large preview modal */
 .stagnant-preview-modal {
   position: fixed;
   inset: 0;

@@ -312,38 +312,6 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
     <input type="hidden" name="group_guids[]" value="<?= h($guid) ?>">
   <?php endforeach; ?>
 
-  <div class="sticky top-2 z-10 mb-3 rounded-xl border border-border-subtle bg-white/95 backdrop-blur px-3 py-2.5 shadow-sm space-y-2" data-stagnant-tray>
-    <div class="flex flex-wrap items-end gap-2.5">
-      <label class="text-sm">
-        <span class="text-text-muted">عنوان العرض</span>
-        <input type="text" name="offer_title" value="عرض تصريف راكد <?= h(date('Y-m-d')) ?>" class="mt-1 block w-56 h-10 rounded-xl border border-border-subtle px-3 text-sm">
-      </label>
-      <label class="text-sm">
-        <span class="text-text-muted">خصم افتراضي %</span>
-        <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
-      </label>
-      <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
-      <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" data-loading-label="جاري الحفظ…" disabled>
-        حفظ مسودة (<span data-stagnant-selected-count>0</span>)
-      </button>
-      <button type="submit" class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-110 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="activate" data-loading-label="جاري التفعيل…" disabled>
-        تفعيل العرض
-      </button>
-      <span class="text-sm font-bold text-slate-600 hidden" data-stagnant-saving-hint aria-live="polite">جاري الحفظ…</span>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
-    </div>
-    <div>
-      <div class="flex items-center justify-between gap-2 mb-1.5">
-        <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
-        <p class="text-xs text-text-muted">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
-      </div>
-      <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[2.75rem] max-h-40 overflow-y-auto" data-stagnant-tray-list>
-        <p class="text-xs text-text-muted px-3 py-3 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
-      </div>
-    </div>
-  </div>
-
   <?php if ($items === []): ?>
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
@@ -533,6 +501,40 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       </table>
     </div>
   <?php endif; ?>
+
+  <div class="stagnant-candidates-dock-spacer" data-stagnant-tray-spacer aria-hidden="true"></div>
+
+  <div class="stagnant-candidates-dock" data-stagnant-tray>
+    <div class="stagnant-candidates-dock__toolbar flex flex-wrap items-end gap-2.5">
+      <label class="text-sm">
+        <span class="text-text-muted">عنوان العرض</span>
+        <input type="text" name="offer_title" value="عرض تصريف راكد <?= h(date('Y-m-d')) ?>" class="mt-1 block w-56 h-10 rounded-xl border border-border-subtle px-3 text-sm">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted">خصم افتراضي %</span>
+        <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
+      </label>
+      <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
+      <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" data-loading-label="جاري الحفظ…" disabled>
+        حفظ مسودة (<span data-stagnant-selected-count>0</span>)
+      </button>
+      <button type="submit" class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-110 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="activate" data-loading-label="جاري التفعيل…" disabled>
+        تفعيل العرض
+      </button>
+      <span class="text-sm font-bold text-slate-600 hidden" data-stagnant-saving-hint aria-live="polite">جاري الحفظ…</span>
+      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
+      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
+    </div>
+    <div class="stagnant-candidates-dock__list-wrap">
+      <div class="flex items-center justify-between gap-2 mb-1.5 flex-shrink-0">
+        <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
+        <p class="text-xs text-text-muted hidden sm:block">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
+      </div>
+      <div class="stagnant-candidates-dock__list" data-stagnant-tray-list>
+        <p class="text-xs text-text-muted px-3 py-3 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
+      </div>
+    </div>
+  </div>
 </form>
 
 <div
