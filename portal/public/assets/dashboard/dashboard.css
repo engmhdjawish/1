@@ -2610,6 +2610,20 @@ button.is-loading[data-loading-label],
   color: #475569;
 }
 
+.so-campaign-progress {
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.so-campaign-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #D81921 0%, #f97316 100%);
+  transition: width 0.25s ease;
+}
+
 .so-offer-status--ended {
   background: #ffedd5;
   color: #9a3412;

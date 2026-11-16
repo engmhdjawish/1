@@ -6,7 +6,6 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
-use Portal\Services\SpecialOfferAnalyticsService;
 use Portal\Services\SpecialOfferService;
 use Portal\Support\DashboardHttp;
 
@@ -201,7 +200,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $dbError = null;
 $stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
 $offers = [];
-$editOfferAnalytics = null;
 try {
     $stats = SpecialOfferService::stats();
     // adminList is counts-only (no preview products / API material batch).
@@ -219,8 +217,7 @@ try {
         : ('تعذر تحميل العروض: ' . $errMsg);
 }
 
-// Do NOT load per-offer analytics on the list page — visitor_logs engagement was N+1
-// and blocked /dashboard/special-offers.php with ~10 offers. Metrics load on edit only.
+// Offer analytics: /dashboard/special-offers-campaigns.php (not on edit — faster saves).
 
 $editOffer = null;
 $includeOfferPreview = (($_GET['preview'] ?? '') === '1');
@@ -231,12 +228,6 @@ if ($editId !== '') {
     if ($editOffer === null) {
         $editId = '';
         $showForm = $isNew;
-    } else {
-        try {
-            $editOfferAnalytics = SpecialOfferAnalyticsService::detailForOffer($editId);
-        } catch (\Throwable) {
-            $editOfferAnalytics = null;
-        }
     }
 }
 if ($showForm && $editOffer === null) {
