@@ -11,6 +11,7 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $focusOffer */
 /** @var string $offerTab */
 /** @var bool $includeEngagement */
+/** @var string $focusOfferId */
 /** @var string|null $dbError */
 
 $fmtInt = static fn ($n): string => number_format((float) $n, 0);
@@ -30,8 +31,8 @@ $offerStatusLabels = [
     'ended' => 'منتهية',
 ];
 
-$buildQuery = static function (array $params = []) use ($offerTab, $includeEngagement, $focusOfferId = null): string {
-    $focusOfferId = $focusOfferId ?? trim((string) ($_GET['offer'] ?? ''));
+$focusOfferId = $focusOfferId ?? trim((string) ($_GET['offer'] ?? ''));
+$buildQuery = static function (array $params = []) use ($offerTab, $includeEngagement, $focusOfferId): string {
     $base = ['tab' => $offerTab];
     if ($includeEngagement) {
         $base['engagement'] = '1';

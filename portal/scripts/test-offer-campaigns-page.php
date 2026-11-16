@@ -28,8 +28,16 @@ $assert('edit form removed inline analytics', !str_contains($offersView, 'قيا
 $assert('shared analytics panel partial', str_contains($panel, 'so-analytics'));
 
 $user = ['permissions' => ['special_offers.manage']];
-$items = DashboardNavigation::filterItems($user, DashboardNavigation::items()['إدارة المحتوى'] ?? []);
-$routes = array_column($items, 'route');
+$groups = DashboardNavigation::siteContentGroups($user);
+$routes = [];
+foreach ($groups as $group) {
+    foreach ($group['items'] ?? [] as $item) {
+        if (is_array($item) && isset($item['route'])) {
+            $routes[] = (string) $item['route'];
+        }
+    }
+}
 $assert('content role sees campaigns nav', in_array('/dashboard/special-offers-campaigns.php', $routes, true));
+$assert('view closure use clause is valid', !preg_match('/use\s*\([^)]*=\s*null/', $campaignsView));
 
 echo "All offer campaigns checks passed.\n";
