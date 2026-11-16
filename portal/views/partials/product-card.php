@@ -88,6 +88,12 @@ $cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 
 $previewPayload = $useImagePreview
     ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)
     : null;
+if ($previewPayload !== null && $comingSoonCard) {
+    $previewPayload = array_merge($previewPayload, [
+        'unavailable' => true,
+        'unavailableLabel' => HomeSearchService::UNAVAILABLE_BADGE,
+    ]);
+}
 if ($previewPayload !== null && $hideUnavailablePrice) {
     $previewPayload = array_merge($previewPayload, [
         'showPrice' => false,

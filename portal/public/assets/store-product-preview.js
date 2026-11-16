@@ -11,7 +11,9 @@
   const pricesEl = document.getElementById('storeProductPreviewPrices');
   const cartEl = document.getElementById('storeProductPreviewCart');
   const counterEl = document.getElementById('storeProductPreviewCounter');
+  const badgesEl = document.getElementById('storeProductPreviewBadges');
   const detailEl = document.getElementById('storeProductPreviewDetail');
+  const UNAVAILABLE_LABEL = 'غير متوفر حالياً';
   const btnPrev = modal.querySelector('[data-preview-prev]');
   const btnNext = modal.querySelector('[data-preview-next]');
 
@@ -110,7 +112,10 @@
       name: String(product?.name || ''),
       code: String(product?.code || ''),
       manufacturer: String(product?.manufacturer || ''),
-      materialType: String(product?.specs?.['النوع'] || ''),
+      materialType: String(product?.specs?.['النوع'] || product?.materialType || ''),
+      sizeRange: String(product?.sizeRange || product?.specs?.['القياس'] || '').trim(),
+      unavailable: !!product?.unavailable,
+      unavailableLabel: String(product?.unavailableLabel || UNAVAILABLE_LABEL),
       thumbUrl,
       zoomUrl,
       detailUrl: guid
@@ -493,6 +498,10 @@
         try {
           const data = JSON.parse(raw);
           if (data && data.guid) {
+            if (data.unavailable == null && card.classList.contains('store-product-card--soon')) {
+              data.unavailable = true;
+              data.unavailableLabel = data.unavailableLabel || UNAVAILABLE_LABEL;
+            }
             items.push(data);
             return;
           }
@@ -535,13 +544,45 @@
   const renderPackaging = (item) => {
     if (!packagingEl) return;
     const label = formatPackagingLabel(item);
-    if (!label) {
+    const sizeRange = String(item?.sizeRange || '').trim();
+    packagingEl.classList.toggle('store-product-preview__packaging--soon', !!item.unavailable);
+    if (!label && !sizeRange) {
       packagingEl.innerHTML = '';
       packagingEl.hidden = true;
       return;
     }
-    packagingEl.innerHTML = `<span class="store-product-preview__packaging-label">التعبئة</span><span class="store-product-preview__packaging-value" dir="ltr">${esc(label)}</span>`;
+    const parts = [];
+    if (label) {
+      parts.push(`<span class="store-product-preview__packaging-label">التعبئة</span><span class="store-product-preview__packaging-value" dir="ltr">${esc(label)}</span>`);
+    }
+    if (sizeRange) {
+      parts.push(`<span class="store-product-preview__packaging-label">القياس</span><span class="store-product-preview__packaging-value store-product-preview__packaging-value--size" dir="ltr">${esc(sizeRange)}</span>`);
+    }
+    packagingEl.innerHTML = parts.join('');
     packagingEl.hidden = false;
+  };
+
+  const renderPreviewBadges = (item) => {
+    if (!badgesEl) return;
+    const chips = [];
+    if (item.unavailable) {
+      chips.push(`<span class="store-product-preview__badge store-product-preview__badge--unavailable" role="status">
+        <span class="material-symbols-outlined" aria-hidden="true">block</span>
+        <span>${esc(item.unavailableLabel || UNAVAILABLE_LABEL)}</span>
+      </span>`);
+    } else if (item.hasOffer) {
+      chips.push(`<span class="store-product-preview__badge store-product-preview__badge--offer">
+        <span class="material-symbols-outlined" aria-hidden="true">local_offer</span>
+        <span>${esc(item.offerBadge || 'عرض خاص')}</span>
+      </span>`);
+    }
+    if (chips.length === 0) {
+      badgesEl.innerHTML = '';
+      badgesEl.hidden = true;
+      return;
+    }
+    badgesEl.innerHTML = chips.join('');
+    badgesEl.hidden = false;
   };
 
   const renderOrderStaffPanel = (item) => {
@@ -689,8 +730,11 @@
       return priceLockHtml('preview', p.guid);
     }
 
-    const badge = p.offerBadge
-      ? `<span class="offer-price-block__badge">${esc(p.offerBadge)}</span>` : '';
+    const badge = p.hasOffer && p.offerBadge
+      ? `<span class="offer-price-block__badge offer-price-block__badge--preview"><span class="material-symbols-outlined" aria-hidden="true">local_offer</span>${esc(p.offerBadge)}</span>`
+      : (p.hasOffer
+        ? `<span class="offer-price-block__badge offer-price-block__badge--preview"><span class="material-symbols-outlined" aria-hidden="true">local_offer</span>عرض خاص</span>`
+        : '');
     const sypRows = [];
     const usdRows = [];
 
@@ -1144,11 +1188,20 @@
       : imageOptions;
     planImageTransition(item, resolvedImageOptions);
     const panel = modal.querySelector('.store-product-preview__panel');
+    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
     if (panel) {
-      panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
+      const unavailable = !!item.unavailable;
+      panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer && !unavailable);
+      panel.classList.toggle('store-product-preview__panel--soon', unavailable);
       panel.classList.toggle('store-product-preview__panel--cart', state.context === 'cart');
       panel.classList.toggle('store-product-preview__panel--order', state.context === 'order');
     }
+
+    if (imageWrap) {
+      imageWrap.classList.toggle('store-product-preview__image-wrap--soon', !!item.unavailable);
+    }
+
+    renderPreviewBadges(item);
 
     state.currentGuid = item.guid || state.currentGuid;
 
@@ -1157,19 +1210,30 @@
     }
     applyPreviewImage(item, resolvedImageOptions);
     preloadAdjacent(state.index);
-
-    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
     if (imageWrap) {
       let banner = imageWrap.querySelector('.store-product-preview__offer-banner');
-      if (item.hasOffer && state.context !== 'order') {
+      const showOfferBanner = item.hasOffer && !item.unavailable && state.context !== 'order';
+      if (showOfferBanner) {
         if (!banner) {
           banner = document.createElement('div');
           banner.className = 'store-product-preview__offer-banner';
           imageWrap.insertBefore(banner, imageWrap.firstChild);
         }
-        banner.innerHTML = `<span class="material-symbols-outlined text-base" aria-hidden="true">local_offer</span>${esc(item.offerBadge || 'عرض خاص')}`;
+        banner.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">local_offer</span><span class="store-product-preview__offer-banner-text">${esc(item.offerBadge || 'عرض خاص')}</span>`;
       } else if (banner) {
         banner.remove();
+      }
+
+      let soonBand = imageWrap.querySelector('.store-product-preview__soon-band');
+      if (item.unavailable && state.context !== 'order') {
+        if (!soonBand) {
+          soonBand = document.createElement('div');
+          soonBand.className = 'store-product-preview__soon-band';
+          imageWrap.insertBefore(soonBand, imageWrap.firstChild);
+        }
+        soonBand.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">block</span><span>${esc(item.unavailableLabel || UNAVAILABLE_LABEL)}</span>`;
+      } else if (soonBand) {
+        soonBand.remove();
       }
     }
 
@@ -1177,6 +1241,7 @@
 
     if (subtitleEl) {
       if (state.context === 'order') {
+        subtitleEl.classList.remove('store-product-preview__subtitle--unavailable');
         if (item.isCancelled) {
           subtitleEl.textContent = 'صنف ملغى من الطلب';
         } else {
@@ -1188,10 +1253,14 @@
           item.manufacturer,
           item.code ? `#${item.code}` : '',
           item.materialType,
-          item.showQuantity && item.packagesAvailable > 0
-            ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
-            : '',
+          item.sizeRange ? `قياس ${item.sizeRange}` : '',
+          item.unavailable
+            ? (item.unavailableLabel || UNAVAILABLE_LABEL)
+            : (item.showQuantity && item.packagesAvailable > 0
+              ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
+              : ''),
         ].filter(Boolean);
+        subtitleEl.classList.toggle('store-product-preview__subtitle--unavailable', !!item.unavailable);
         subtitleEl.textContent = parts.join(' · ');
         subtitleEl.hidden = parts.length === 0;
       }

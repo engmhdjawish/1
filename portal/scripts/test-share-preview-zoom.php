@@ -86,6 +86,19 @@ $assert(
     && str_contains($previewJs, 'markPreviewImageReady')
 );
 $assert(
+    'preview surfaces offer and unavailable state clearly',
+    str_contains($previewJs, 'renderPreviewBadges')
+    && str_contains($previewJs, 'store-product-preview__badge--unavailable')
+    && str_contains($previewJs, 'store-product-preview__soon-band')
+);
+
+$helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
+$assert(
+    'preview payload includes unavailable and size range',
+    str_contains($helpers, "'unavailable' =>")
+    && str_contains($helpers, "'sizeRange' =>")
+);
+$assert(
     'preview exports deep-link helpers',
     str_contains($previewJs, 'window.StoreProductPreview = { open, close, openFromGuid, openFromPayload }')
 );

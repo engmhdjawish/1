@@ -962,6 +962,8 @@ function product_preview_payload(
     $atLimit = $qtyBounds['atLimit'];
     // لا تُسرَّب كمية المخزون في HTML عندما تخفيها السياسة (حدود السلة تبقى عبر effectiveMax).
     $packagesAvailable = $showQuantity ? (float) ($qtyBounds['stockAvailable'] ?? 0.0) : 0.0;
+    $unavailable = \Portal\Services\StoreCatalogService::materialIsUnavailable($item);
+    $sizeRange = trim((string) ($item['sizeRange'] ?? ''));
 
     return [
         'guid' => $guid,
@@ -969,6 +971,9 @@ function product_preview_payload(
         'code' => (string) ($item['materialCode'] ?? $item['code'] ?? ''),
         'manufacturer' => (string) ($item['manufacturer'] ?? ''),
         'materialType' => (string) ($item['materialType'] ?? ''),
+        'sizeRange' => $sizeRange,
+        'unavailable' => $unavailable,
+        'unavailableLabel' => \Portal\Services\HomeSearchService::UNAVAILABLE_BADGE,
         'thumbUrl' => $thumbUrl,
         'zoomUrl' => $zoomUrl,
         'detailUrl' => $guid !== '' ? product_url($guid, $returnUrl, $offerSlug, share_token_from_return_url($returnUrl)) : '',
