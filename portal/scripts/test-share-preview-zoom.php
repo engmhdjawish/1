@@ -80,6 +80,12 @@ $assert(
     && str_contains($previewJs, 'zoomState.scale > 1.001')
 );
 $assert(
+    'preview keeps full images cached and shows thumb while upgrading',
+    str_contains($previewJs, 'isFullPreviewCached')
+    && str_contains($previewJs, 'planImageTransition')
+    && str_contains($previewJs, 'markPreviewImageReady')
+);
+$assert(
     'preview exports deep-link helpers',
     str_contains($previewJs, 'window.StoreProductPreview = { open, close, openFromGuid, openFromPayload }')
 );

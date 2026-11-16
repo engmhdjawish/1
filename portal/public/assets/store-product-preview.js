@@ -270,6 +270,8 @@
     [-1, 1, 2, -2].forEach((offset) => {
       const item = state.items[index + offset];
       const url = imageUrlFor(item);
+      const thumb = thumbUrlFor(item);
+      if (thumb && thumb !== url) preloadImage(thumb).catch(() => {});
       if (url) preloadImage(url).catch(() => {});
     });
   };
@@ -296,11 +298,64 @@
     delete imgEl.dataset.pendingFull;
   };
 
+  const isFullPreviewCached = (src) => {
+    const url = String(src || '').trim();
+    if (!url) return false;
+    if (window.StoreImageZoom?.isImageLoaded?.(url)) return true;
+    return imageCache.get(url)?.status === 'ready';
+  };
+
+  const markPreviewImageReady = (src) => {
+    const url = String(src || '').trim();
+    if (!url) return;
+    imageCache.set(url, { status: 'ready' });
+  };
+
+  const planImageTransition = (item, options = {}) => {
+    imageRenderToken += 1;
+    const src = imageUrlFor(item);
+    const thumbSrc = thumbUrlFor(item);
+    const preferElement = options.preferElement || findCardImageForItem(item);
+    const zoom = window.StoreImageZoom;
+
+    if (isFullPreviewCached(src)) {
+      setImageLoading(false);
+      return;
+    }
+
+    const thumbFromCard = preferElement instanceof HTMLImageElement
+      && zoom?.isElementReady?.(preferElement);
+    const thumbCached = thumbSrc && (
+      isFullPreviewCached(thumbSrc)
+      || thumbFromCard
+      || zoom?.isImageLoaded?.(thumbSrc)
+    );
+
+    if (thumbCached && imgEl) {
+      setImageLoading(true);
+      const thumbApply = thumbFromCard
+        ? (preferElement.currentSrc || preferElement.src || thumbSrc)
+        : thumbSrc;
+      if (zoom?.applySrc) {
+        zoom.applySrc(imgEl, thumbApply, { preferElement });
+      } else {
+        imgEl.src = thumbApply;
+      }
+      imgEl.classList.add('is-preview-thumb');
+      imgEl.classList.remove('is-placeholder', 'is-loading');
+      delete imgEl.dataset.pendingFull;
+      return;
+    }
+
+    prepareImageTransition();
+  };
+
   const applyPreviewImage = async (itemOrUrl, options = {}) => {
     const isItem = itemOrUrl && typeof itemOrUrl === 'object';
     const src = isItem ? imageUrlFor(itemOrUrl) : String(itemOrUrl || '').trim();
     const thumbSrc = isItem ? thumbUrlFor(itemOrUrl) : thumbFromZoomUrl(src);
     const preferElement = options.preferElement || (isItem ? findCardImageForItem(itemOrUrl) : null);
+    const loadOptions = preferElement ? { ...options, preferElement } : options;
     const token = ++imageRenderToken;
 
     if (!imgEl) return;
@@ -328,12 +383,13 @@
     if (fullReady) {
       setImageLoading(false);
       if (zoom?.applySrc) {
-        zoom.applySrc(imgEl, src, { preferElement });
+        zoom.applySrc(imgEl, src, loadOptions);
       } else {
         imgEl.src = src;
       }
       imgEl.classList.remove('is-placeholder', 'is-loading', 'is-preview-thumb');
       delete imgEl.dataset.pendingFull;
+      markPreviewImageReady(src);
       return;
     }
 
@@ -342,10 +398,11 @@
 
     if (zoom?.loadProgressive) {
       if (hasThumb && thumbReady) {
-        zoom.applySrc(imgEl, thumbSrc, { preferElement });
+        zoom.applySrc(imgEl, thumbSrc, loadOptions);
         imgEl.classList.add('is-preview-thumb');
         setImageLoading(true);
       } else if (hasThumb) {
+        zoom.applySrc(imgEl, thumbSrc, loadOptions);
         imgEl.classList.add('is-preview-thumb');
         setImageLoading(true);
       } else {
@@ -354,10 +411,11 @@
       }
 
       try {
-        await zoom.loadProgressive(imgEl, src, thumbSrc, { preferElement });
+        await zoom.loadProgressive(imgEl, src, thumbSrc, loadOptions);
         if (token !== imageRenderToken) return;
         imgEl.classList.remove('is-loading', 'is-preview-thumb');
         setImageLoading(false);
+        markPreviewImageReady(src);
       } catch (_) {
         if (token !== imageRenderToken) return;
         if (!thumbReady) {
@@ -405,6 +463,7 @@
       imgEl.src = src;
       imgEl.classList.remove('is-loading', 'is-preview-thumb');
       setImageLoading(false);
+      markPreviewImageReady(src);
     } catch (_) {
       if (token !== imageRenderToken) return;
       if (!thumbReady) {
@@ -1077,9 +1136,13 @@
 
   const render = (p, imageOptions = {}) => {
     const item = state.context === 'order' ? p : syncCartQtyFromDom(p);
-    if (!imageOptions.preferElement) {
-      prepareImageTransition();
-    }
+    const preferElement = imageOptions.preferElement instanceof HTMLImageElement
+      ? imageOptions.preferElement
+      : findCardImageForItem(item);
+    const resolvedImageOptions = preferElement
+      ? { ...imageOptions, preferElement }
+      : imageOptions;
+    planImageTransition(item, resolvedImageOptions);
     const panel = modal.querySelector('.store-product-preview__panel');
     if (panel) {
       panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
@@ -1092,7 +1155,7 @@
     if (imgEl) {
       imgEl.alt = item.name || '';
     }
-    applyPreviewImage(item, imageOptions);
+    applyPreviewImage(item, resolvedImageOptions);
     preloadAdjacent(state.index);
 
     const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
@@ -1178,8 +1241,8 @@
     if (item?.guid) state.currentGuid = item.guid;
     const preferElement = imageOptions.preferElement instanceof HTMLImageElement
       ? imageOptions.preferElement
-      : null;
-    render(item, preferElement ? { preferElement } : {});
+      : findCardImageForItem(item);
+    render(item, preferElement ? { preferElement, ...imageOptions } : imageOptions);
   };
 
   const cleanPreviewUrl = (url) => {
