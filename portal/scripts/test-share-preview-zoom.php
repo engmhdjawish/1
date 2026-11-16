@@ -90,6 +90,8 @@ $assert(
     str_contains($previewJs, 'renderPreviewBadges')
     && str_contains($previewJs, 'store-product-preview__badge--unavailable')
     && str_contains($previewJs, 'store-product-preview__soon-band')
+    && str_contains($previewJs, 'store-product-preview__offer-ribbon')
+    && str_contains($previewJs, 'store-product-preview__offer-head')
 );
 
 $helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
