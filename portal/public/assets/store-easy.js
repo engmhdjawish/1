@@ -73,6 +73,16 @@
     window.StoreImageZoom?.seedLoadedImages?.(root);
   };
 
+  const syncPreviewPaging = (root) => {
+    const script = root?.querySelector('[data-store-preview-paging]');
+    if (!script) return;
+    try {
+      window.__storePreviewPaging = JSON.parse(script.textContent || '{}');
+    } catch {
+      window.__storePreviewPaging = {};
+    }
+  };
+
   const applyDensity = () => {
     const density = window.localStorage?.getItem(DENSITY_KEY) === '2' ? '2' : '1';
     document.documentElement.classList.toggle('se-dense', density === '2');
@@ -87,6 +97,7 @@
   const prepareLive = (root) => {
     if (!root) return;
     applyDensity();
+    syncPreviewPaging(root);
   };
 
   // A fast fling stops where the materials end; a fresh scroll from there carries on to the footer.
@@ -360,6 +371,9 @@
     prepareLive(live());
     brakeBeforeFooter();
   };
+
+  /** Lets store-product-preview load the next/prev catalog page without a full reload. */
+  window.portalStoreCatalogNavigate = navigate;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

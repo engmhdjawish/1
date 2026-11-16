@@ -76,6 +76,8 @@ $check('js shortens bar', str_contains($js, 'shortenAddressBar'), true);
 $check('js keeps working href', str_contains($js, 'workingHref'), true);
 $check('js in-app share', str_contains($js, 'shareCurrentView') && str_contains($js, 'navigator.share'), true);
 $check('easy uses shorten', str_contains($easy, 'shortenAddressBar'), true);
+$check('easy syncs preview paging', str_contains($easy, 'syncPreviewPaging') && str_contains($easy, '__storePreviewPaging'), true);
+$check('easy exposes catalog navigate for preview', str_contains($easy, 'portalStoreCatalogNavigate'), true);
 $check('service content hash', str_contains($service, 'payload_hash'), true);
 
 $easyView = file_get_contents(dirname(__DIR__) . '/views/store-easy.php') ?: '';

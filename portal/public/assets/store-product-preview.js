@@ -48,7 +48,21 @@
   const ZOOM_MAX = 4;
   const ZOOM_DOUBLE_TAP = 2.4;
 
-  const paging = () => window.__storePreviewPaging || {};
+  const paging = () => {
+    const cached = window.__storePreviewPaging;
+    if (cached && (cached.nextPageUrl || cached.prevPageUrl || cached.totalPages > 1)) {
+      return cached;
+    }
+    const script = document.querySelector('[data-store-preview-paging]');
+    if (!script) return cached || {};
+    try {
+      const parsed = JSON.parse(script.textContent || '{}');
+      window.__storePreviewPaging = parsed;
+      return parsed;
+    } catch {
+      return cached || {};
+    }
+  };
 
   const esc = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
