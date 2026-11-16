@@ -958,19 +958,173 @@
 }
 
 .store-product-preview__panel.store-product-preview__panel--offer {
-  box-shadow: 0 24px 80px rgba(216, 25, 33, 0.18);
+  border: 2px solid rgba(216, 25, 33, 0.5);
+  box-shadow: 0 24px 80px rgba(216, 25, 33, 0.22);
 }
 
-.store-product-preview__offer-banner {
+.store-product-preview__panel--offer .store-product-preview__meta {
+  background: linear-gradient(180deg, #fff9f9 0%, #fff 55%);
+}
+
+.store-product-preview__offer-ribbon {
+  position: absolute;
+  inset-inline-start: 0.75rem;
+  top: 0.75rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #D81921 0%, #b51218 100%);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.2;
+  box-shadow: 0 8px 22px rgba(216, 25, 33, 0.4);
+  pointer-events: none;
+}
+
+.store-product-preview__offer-ribbon .material-symbols-outlined {
+  font-size: 1.15rem;
+  font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+}
+
+.store-product-preview__offer-ribbon-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-product-preview__soon-band {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.75rem;
-  background: linear-gradient(135deg, #D81921 0%, #b51218 100%);
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  background: #D81921;
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   font-weight: 800;
+  line-height: 1.25;
+  box-shadow: 0 6px 18px rgba(216, 25, 33, 0.28);
+}
+
+.store-product-preview__soon-band .material-symbols-outlined {
+  font-size: 1.15rem;
+  font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+}
+
+.store-product-preview__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.15rem;
+}
+
+.store-product-preview__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.store-product-preview__badge .material-symbols-outlined {
+  font-size: 1rem;
+  font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+}
+
+.store-product-preview__badges--offer {
+  width: 100%;
+}
+
+.store-product-preview__offer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(216, 25, 33, 0.35);
+  background: linear-gradient(135deg, rgba(216, 25, 33, 0.12) 0%, rgba(216, 25, 33, 0.04) 100%);
+  color: #991b1b;
+}
+
+.store-product-preview__offer-head-icon {
+  flex: 0 0 auto;
+  font-size: 1.35rem;
+  color: #D81921;
+  font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+}
+
+.store-product-preview__offer-head-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.store-product-preview__offer-head-kicker {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #D81921;
+  letter-spacing: 0.02em;
+}
+
+.store-product-preview__offer-head-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #7f1d1d;
+  line-height: 1.25;
+}
+
+.store-product-preview__title--offer {
+  color: #991b1b;
+}
+
+.store-product-preview__badge--unavailable {
+  width: 100%;
+  border-radius: 0.65rem;
+  background: #D81921;
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.store-product-preview__panel.store-product-preview__panel--soon {
+  background: #f8fafc;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
+}
+
+.store-product-preview__image-wrap--soon img {
+  filter: grayscale(1);
+  opacity: 0.72;
+}
+
+.store-product-preview__subtitle--unavailable {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.store-product-preview__packaging--soon {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #0f172a;
+}
+
+.store-product-preview__prices .offer-price-block__badge--preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
+  margin-bottom: 0.35rem;
 }
 
 .offer-price-block__row {
@@ -1514,6 +1668,12 @@
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
   padding: 0.55rem 0.65rem;
+}
+
+.store-product-preview__panel--offer .store-product-preview__prices .offer-price-block {
+  border-color: rgba(216, 25, 33, 0.35);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(216, 25, 33, 0.08);
 }
 
 .store-product-preview__no-price {

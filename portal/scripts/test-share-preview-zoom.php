@@ -80,6 +80,27 @@ $assert(
     && str_contains($previewJs, 'zoomState.scale > 1.001')
 );
 $assert(
+    'preview keeps full images cached and shows thumb while upgrading',
+    str_contains($previewJs, 'isFullPreviewCached')
+    && str_contains($previewJs, 'planImageTransition')
+    && str_contains($previewJs, 'markPreviewImageReady')
+);
+$assert(
+    'preview surfaces offer and unavailable state clearly',
+    str_contains($previewJs, 'renderPreviewBadges')
+    && str_contains($previewJs, 'store-product-preview__badge--unavailable')
+    && str_contains($previewJs, 'store-product-preview__soon-band')
+    && str_contains($previewJs, 'store-product-preview__offer-ribbon')
+    && str_contains($previewJs, 'store-product-preview__offer-head')
+);
+
+$helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
+$assert(
+    'preview payload includes unavailable and size range',
+    str_contains($helpers, "'unavailable' =>")
+    && str_contains($helpers, "'sizeRange' =>")
+);
+$assert(
     'preview exports deep-link helpers',
     str_contains($previewJs, 'window.StoreProductPreview = { open, close, openFromGuid, openFromPayload }')
 );

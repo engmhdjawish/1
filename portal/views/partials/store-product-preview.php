@@ -21,6 +21,7 @@
     </div>
     <div class="store-product-preview__meta">
       <div class="store-product-preview__counter" id="storeProductPreviewCounter"></div>
+      <div id="storeProductPreviewBadges" class="store-product-preview__badges" hidden></div>
       <h2 id="storeProductPreviewTitle" class="store-product-preview__title"></h2>
       <p id="storeProductPreviewSubtitle" class="store-product-preview__subtitle"></p>
       <div id="storeProductPreviewPackaging" class="store-product-preview__packaging" hidden></div>

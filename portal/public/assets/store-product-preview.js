@@ -11,7 +11,9 @@
   const pricesEl = document.getElementById('storeProductPreviewPrices');
   const cartEl = document.getElementById('storeProductPreviewCart');
   const counterEl = document.getElementById('storeProductPreviewCounter');
+  const badgesEl = document.getElementById('storeProductPreviewBadges');
   const detailEl = document.getElementById('storeProductPreviewDetail');
+  const UNAVAILABLE_LABEL = 'غير متوفر حالياً';
   const btnPrev = modal.querySelector('[data-preview-prev]');
   const btnNext = modal.querySelector('[data-preview-next]');
 
@@ -48,7 +50,21 @@
   const ZOOM_MAX = 4;
   const ZOOM_DOUBLE_TAP = 2.4;
 
-  const paging = () => window.__storePreviewPaging || {};
+  const paging = () => {
+    const cached = window.__storePreviewPaging;
+    if (cached && (cached.nextPageUrl || cached.prevPageUrl || cached.totalPages > 1)) {
+      return cached;
+    }
+    const script = document.querySelector('[data-store-preview-paging]');
+    if (!script) return cached || {};
+    try {
+      const parsed = JSON.parse(script.textContent || '{}');
+      window.__storePreviewPaging = parsed;
+      return parsed;
+    } catch {
+      return cached || {};
+    }
+  };
 
   const esc = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -96,7 +112,10 @@
       name: String(product?.name || ''),
       code: String(product?.code || ''),
       manufacturer: String(product?.manufacturer || ''),
-      materialType: String(product?.specs?.['النوع'] || ''),
+      materialType: String(product?.specs?.['النوع'] || product?.materialType || ''),
+      sizeRange: String(product?.sizeRange || product?.specs?.['القياس'] || '').trim(),
+      unavailable: !!product?.unavailable,
+      unavailableLabel: String(product?.unavailableLabel || UNAVAILABLE_LABEL),
       thumbUrl,
       zoomUrl,
       detailUrl: guid
@@ -256,6 +275,8 @@
     [-1, 1, 2, -2].forEach((offset) => {
       const item = state.items[index + offset];
       const url = imageUrlFor(item);
+      const thumb = thumbUrlFor(item);
+      if (thumb && thumb !== url) preloadImage(thumb).catch(() => {});
       if (url) preloadImage(url).catch(() => {});
     });
   };
@@ -282,11 +303,64 @@
     delete imgEl.dataset.pendingFull;
   };
 
+  const isFullPreviewCached = (src) => {
+    const url = String(src || '').trim();
+    if (!url) return false;
+    if (window.StoreImageZoom?.isImageLoaded?.(url)) return true;
+    return imageCache.get(url)?.status === 'ready';
+  };
+
+  const markPreviewImageReady = (src) => {
+    const url = String(src || '').trim();
+    if (!url) return;
+    imageCache.set(url, { status: 'ready' });
+  };
+
+  const planImageTransition = (item, options = {}) => {
+    imageRenderToken += 1;
+    const src = imageUrlFor(item);
+    const thumbSrc = thumbUrlFor(item);
+    const preferElement = options.preferElement || findCardImageForItem(item);
+    const zoom = window.StoreImageZoom;
+
+    if (isFullPreviewCached(src)) {
+      setImageLoading(false);
+      return;
+    }
+
+    const thumbFromCard = preferElement instanceof HTMLImageElement
+      && zoom?.isElementReady?.(preferElement);
+    const thumbCached = thumbSrc && (
+      isFullPreviewCached(thumbSrc)
+      || thumbFromCard
+      || zoom?.isImageLoaded?.(thumbSrc)
+    );
+
+    if (thumbCached && imgEl) {
+      setImageLoading(true);
+      const thumbApply = thumbFromCard
+        ? (preferElement.currentSrc || preferElement.src || thumbSrc)
+        : thumbSrc;
+      if (zoom?.applySrc) {
+        zoom.applySrc(imgEl, thumbApply, { preferElement });
+      } else {
+        imgEl.src = thumbApply;
+      }
+      imgEl.classList.add('is-preview-thumb');
+      imgEl.classList.remove('is-placeholder', 'is-loading');
+      delete imgEl.dataset.pendingFull;
+      return;
+    }
+
+    prepareImageTransition();
+  };
+
   const applyPreviewImage = async (itemOrUrl, options = {}) => {
     const isItem = itemOrUrl && typeof itemOrUrl === 'object';
     const src = isItem ? imageUrlFor(itemOrUrl) : String(itemOrUrl || '').trim();
     const thumbSrc = isItem ? thumbUrlFor(itemOrUrl) : thumbFromZoomUrl(src);
     const preferElement = options.preferElement || (isItem ? findCardImageForItem(itemOrUrl) : null);
+    const loadOptions = preferElement ? { ...options, preferElement } : options;
     const token = ++imageRenderToken;
 
     if (!imgEl) return;
@@ -314,12 +388,13 @@
     if (fullReady) {
       setImageLoading(false);
       if (zoom?.applySrc) {
-        zoom.applySrc(imgEl, src, { preferElement });
+        zoom.applySrc(imgEl, src, loadOptions);
       } else {
         imgEl.src = src;
       }
       imgEl.classList.remove('is-placeholder', 'is-loading', 'is-preview-thumb');
       delete imgEl.dataset.pendingFull;
+      markPreviewImageReady(src);
       return;
     }
 
@@ -328,10 +403,11 @@
 
     if (zoom?.loadProgressive) {
       if (hasThumb && thumbReady) {
-        zoom.applySrc(imgEl, thumbSrc, { preferElement });
+        zoom.applySrc(imgEl, thumbSrc, loadOptions);
         imgEl.classList.add('is-preview-thumb');
         setImageLoading(true);
       } else if (hasThumb) {
+        zoom.applySrc(imgEl, thumbSrc, loadOptions);
         imgEl.classList.add('is-preview-thumb');
         setImageLoading(true);
       } else {
@@ -340,10 +416,11 @@
       }
 
       try {
-        await zoom.loadProgressive(imgEl, src, thumbSrc, { preferElement });
+        await zoom.loadProgressive(imgEl, src, thumbSrc, loadOptions);
         if (token !== imageRenderToken) return;
         imgEl.classList.remove('is-loading', 'is-preview-thumb');
         setImageLoading(false);
+        markPreviewImageReady(src);
       } catch (_) {
         if (token !== imageRenderToken) return;
         if (!thumbReady) {
@@ -391,6 +468,7 @@
       imgEl.src = src;
       imgEl.classList.remove('is-loading', 'is-preview-thumb');
       setImageLoading(false);
+      markPreviewImageReady(src);
     } catch (_) {
       if (token !== imageRenderToken) return;
       if (!thumbReady) {
@@ -420,6 +498,10 @@
         try {
           const data = JSON.parse(raw);
           if (data && data.guid) {
+            if (data.unavailable == null && card.classList.contains('store-product-card--soon')) {
+              data.unavailable = true;
+              data.unavailableLabel = data.unavailableLabel || UNAVAILABLE_LABEL;
+            }
             items.push(data);
             return;
           }
@@ -462,6 +544,7 @@
   const renderPackaging = (item) => {
     if (!packagingEl) return;
     const label = formatPackagingLabel(item);
+    packagingEl.classList.toggle('store-product-preview__packaging--soon', !!item.unavailable);
     if (!label) {
       packagingEl.innerHTML = '';
       packagingEl.hidden = true;
@@ -469,6 +552,35 @@
     }
     packagingEl.innerHTML = `<span class="store-product-preview__packaging-label">التعبئة</span><span class="store-product-preview__packaging-value" dir="ltr">${esc(label)}</span>`;
     packagingEl.hidden = false;
+  };
+
+  const renderPreviewBadges = (item) => {
+    if (!badgesEl) return;
+    const chips = [];
+    if (item.unavailable) {
+      chips.push(`<span class="store-product-preview__badge store-product-preview__badge--unavailable" role="status">
+        <span class="material-symbols-outlined" aria-hidden="true">block</span>
+        <span>${esc(item.unavailableLabel || UNAVAILABLE_LABEL)}</span>
+      </span>`);
+    } else if (item.hasOffer) {
+      const offerText = esc(item.offerBadge || 'عرض خاص');
+      chips.push(`<div class="store-product-preview__offer-head" role="status">
+        <span class="store-product-preview__offer-head-icon material-symbols-outlined" aria-hidden="true">local_offer</span>
+        <span class="store-product-preview__offer-head-body">
+          <span class="store-product-preview__offer-head-kicker">عرض خاص</span>
+          <strong class="store-product-preview__offer-head-text">${offerText}</strong>
+        </span>
+      </div>`);
+    }
+    if (chips.length === 0) {
+      badgesEl.innerHTML = '';
+      badgesEl.hidden = true;
+      badgesEl.classList.remove('store-product-preview__badges--offer');
+      return;
+    }
+    badgesEl.innerHTML = chips.join('');
+    badgesEl.hidden = false;
+    badgesEl.classList.toggle('store-product-preview__badges--offer', !!item.hasOffer && !item.unavailable);
   };
 
   const renderOrderStaffPanel = (item) => {
@@ -616,8 +728,11 @@
       return priceLockHtml('preview', p.guid);
     }
 
-    const badge = p.offerBadge
-      ? `<span class="offer-price-block__badge">${esc(p.offerBadge)}</span>` : '';
+    const badge = p.hasOffer && p.offerBadge
+      ? `<span class="offer-price-block__badge offer-price-block__badge--preview"><span class="material-symbols-outlined" aria-hidden="true">local_offer</span>${esc(p.offerBadge)}</span>`
+      : (p.hasOffer
+        ? `<span class="offer-price-block__badge offer-price-block__badge--preview"><span class="material-symbols-outlined" aria-hidden="true">local_offer</span>عرض خاص</span>`
+        : '');
     const sypRows = [];
     const usdRows = [];
 
@@ -1063,43 +1178,76 @@
 
   const render = (p, imageOptions = {}) => {
     const item = state.context === 'order' ? p : syncCartQtyFromDom(p);
-    if (!imageOptions.preferElement) {
-      prepareImageTransition();
-    }
+    const preferElement = imageOptions.preferElement instanceof HTMLImageElement
+      ? imageOptions.preferElement
+      : findCardImageForItem(item);
+    const resolvedImageOptions = preferElement
+      ? { ...imageOptions, preferElement }
+      : imageOptions;
+    planImageTransition(item, resolvedImageOptions);
     const panel = modal.querySelector('.store-product-preview__panel');
+    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
     if (panel) {
-      panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
+      const unavailable = !!item.unavailable;
+      panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer && !unavailable);
+      panel.classList.toggle('store-product-preview__panel--soon', unavailable);
       panel.classList.toggle('store-product-preview__panel--cart', state.context === 'cart');
       panel.classList.toggle('store-product-preview__panel--order', state.context === 'order');
     }
+
+    if (imageWrap) {
+      imageWrap.classList.toggle('store-product-preview__image-wrap--soon', !!item.unavailable);
+    }
+
+    renderPreviewBadges(item);
 
     state.currentGuid = item.guid || state.currentGuid;
 
     if (imgEl) {
       imgEl.alt = item.name || '';
     }
-    applyPreviewImage(item, imageOptions);
+    applyPreviewImage(item, resolvedImageOptions);
     preloadAdjacent(state.index);
-
-    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
     if (imageWrap) {
-      let banner = imageWrap.querySelector('.store-product-preview__offer-banner');
-      if (item.hasOffer && state.context !== 'order') {
-        if (!banner) {
-          banner = document.createElement('div');
-          banner.className = 'store-product-preview__offer-banner';
-          imageWrap.insertBefore(banner, imageWrap.firstChild);
+      imageWrap.querySelector('.store-product-preview__offer-banner')?.remove();
+
+      let ribbon = imageWrap.querySelector('.store-product-preview__offer-ribbon');
+      const showOfferRibbon = item.hasOffer && !item.unavailable && state.context !== 'order';
+      if (showOfferRibbon) {
+        if (!ribbon) {
+          ribbon = document.createElement('div');
+          ribbon.className = 'store-product-preview__offer-ribbon';
+          imageWrap.appendChild(ribbon);
         }
-        banner.innerHTML = `<span class="material-symbols-outlined text-base" aria-hidden="true">local_offer</span>${esc(item.offerBadge || 'عرض خاص')}`;
-      } else if (banner) {
-        banner.remove();
+        ribbon.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">local_offer</span><span class="store-product-preview__offer-ribbon-text">${esc(item.offerBadge || 'عرض')}</span>`;
+      } else if (ribbon) {
+        ribbon.remove();
+      }
+
+      let soonBand = imageWrap.querySelector('.store-product-preview__soon-band');
+      if (item.unavailable && state.context !== 'order') {
+        if (!soonBand) {
+          soonBand = document.createElement('div');
+          soonBand.className = 'store-product-preview__soon-band';
+          imageWrap.insertBefore(soonBand, imageWrap.firstChild);
+        }
+        soonBand.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">block</span><span>${esc(item.unavailableLabel || UNAVAILABLE_LABEL)}</span>`;
+      } else if (soonBand) {
+        soonBand.remove();
       }
     }
 
-    if (titleEl) titleEl.textContent = item.name || '—';
+    if (titleEl) {
+      titleEl.textContent = item.name || '—';
+      titleEl.classList.toggle(
+        'store-product-preview__title--offer',
+        !!item.hasOffer && !item.unavailable && state.context !== 'order',
+      );
+    }
 
     if (subtitleEl) {
       if (state.context === 'order') {
+        subtitleEl.classList.remove('store-product-preview__subtitle--unavailable');
         if (item.isCancelled) {
           subtitleEl.textContent = 'صنف ملغى من الطلب';
         } else {
@@ -1111,10 +1259,13 @@
           item.manufacturer,
           item.code ? `#${item.code}` : '',
           item.materialType,
-          item.showQuantity && item.packagesAvailable > 0
-            ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
-            : '',
+          item.unavailable
+            ? (item.unavailableLabel || UNAVAILABLE_LABEL)
+            : (item.showQuantity && item.packagesAvailable > 0
+              ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
+              : ''),
         ].filter(Boolean);
+        subtitleEl.classList.toggle('store-product-preview__subtitle--unavailable', !!item.unavailable);
         subtitleEl.textContent = parts.join(' · ');
         subtitleEl.hidden = parts.length === 0;
       }
@@ -1164,8 +1315,8 @@
     if (item?.guid) state.currentGuid = item.guid;
     const preferElement = imageOptions.preferElement instanceof HTMLImageElement
       ? imageOptions.preferElement
-      : null;
-    render(item, preferElement ? { preferElement } : {});
+      : findCardImageForItem(item);
+    render(item, preferElement ? { preferElement, ...imageOptions } : imageOptions);
   };
 
   const cleanPreviewUrl = (url) => {
