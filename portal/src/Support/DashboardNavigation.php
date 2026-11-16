@@ -8,6 +8,7 @@ final class DashboardNavigation
 {
     public const AREA_OPERATIONS = 'operations';
     public const AREA_ACCOUNTING = 'accounting';
+    public const AREA_MERCHANDISING = 'merchandising';
     public const AREA_SITE_CONTENT = 'site_content';
     public const AREA_CONFIGURATION = 'configuration';
 
@@ -32,16 +33,20 @@ final class DashboardNavigation
     ];
 
     /** @var list<string> */
+    private const MERCHANDISING_ROUTES = [
+        '/dashboard/merchandising.php',
+        '/dashboard/special-offers.php',
+        '/dashboard/special-offers-campaigns.php',
+        '/dashboard/stagnant-inventory.php',
+        '/dashboard/store-seasons.php',
+    ];
+
+    /** @var list<string> */
     private const SITE_CONTENT_ROUTES = [
         '/dashboard/site-content.php',
         '/dashboard/home-sections.php',
         '/dashboard/home-shop-blocks.php',
-        '/dashboard/store-seasons.php',
         '/dashboard/home-layout.php',
-        '/dashboard/special-offers.php',
-        '/dashboard/special-offers-campaigns.php',
-        '/dashboard/stagnant-inventory.php',
-        '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
     ];
 
@@ -147,9 +152,13 @@ final class DashboardNavigation
     public static function areaMeta(string $area): array
     {
         return match ($area) {
+            self::AREA_MERCHANDISING => [
+                'title' => 'العروض والمخزون',
+                'subtitle' => 'العروض الخاصة، متابعة الحملات، والمخزون الراكد',
+            ],
             self::AREA_SITE_CONTENT => [
                 'title' => 'محتوى الموقع',
-                'subtitle' => 'الرئيسية والعروض والوسائط ومن نحن',
+                'subtitle' => 'الصفحة الرئيسية والوسائط ومن نحن',
             ],
             self::AREA_CONFIGURATION => [
                 'title' => 'إدارة النظام',
@@ -223,6 +232,17 @@ final class DashboardNavigation
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];
+
+        if (self::userCan($user, 'price_checker.manage')) {
+            $groups['أدوات المحل'] = [
+                [
+                    'route' => '/dashboard/price-checker.php',
+                    'label' => 'فاحص الأسعار في المحل',
+                    'icon' => 'barcode_scanner',
+                    'permission' => 'price_checker.manage',
+                ],
+            ];
+        }
 
         if (self::userCan($user, 'accounting.sync.view') && !self::userCan($user, 'accounting.view')) {
             $groups['المزامنة'] = [
@@ -320,38 +340,10 @@ final class DashboardNavigation
     }
 
     /** @return array<string, list<array<string, mixed>>> */
-    public static function siteContentGroups(?array $user): array
+    public static function merchandisingGroups(?array $user): array
     {
         $groups = [
-            'الصفحات والعروض' => [
-                [
-                    'route' => '/dashboard/home-sections.php',
-                    'label' => 'أقسام الرئيسية',
-                    'icon' => 'home_storage',
-                    'permission' => 'home_sections.manage',
-                    'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
-                ],
-                [
-                    'route' => '/dashboard/home-layout.php',
-                    'label' => 'تخطيط الصفحة الرئيسية',
-                    'icon' => 'dashboard_customize',
-                    'permission' => 'home_sections.manage',
-                    'description' => 'ترتيب أقسام الرئيسية وإظهارها وتعديل عناوينها وخياراتها.',
-                ],
-                [
-                    'route' => '/dashboard/home-shop-blocks.php',
-                    'label' => 'تسوّق حسب',
-                    'icon' => 'category',
-                    'permission' => 'home_sections.manage',
-                    'description' => 'مجموعات الوصول السريع في الرئيسية: الفئة، النوع، الشركة، ودمجها معاً.',
-                ],
-                [
-                    'route' => '/dashboard/store-seasons.php',
-                    'label' => 'مواسم العرض',
-                    'icon' => 'partly_cloudy_day',
-                    'permission' => 'home_sections.manage',
-                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) في مقدمة المتجر، مع تبديل تلقائي حسب التاريخ.',
-                ],
+            'العروض والحملات' => [
                 [
                     'route' => '/dashboard/special-offers.php',
                     'label' => 'العروض الخاصة',
@@ -373,12 +365,54 @@ final class DashboardNavigation
                     'permission' => 'special_offers.manage',
                     'description' => 'مراجعة المواد ذات الرصيد القديم وتوليد عروض تصريف.',
                 ],
+            ],
+            'عرض المتجر' => [
                 [
-                    'route' => '/dashboard/price-checker.php',
-                    'label' => 'فاحص الأسعار في المحل',
-                    'icon' => 'barcode_scanner',
-                    'permission' => 'price_checker.manage',
-                    'description' => 'شاشة مسح الباركود في المحل، IPs المسموحة، وإعلانات الانتظار.',
+                    'route' => '/dashboard/store-seasons.php',
+                    'label' => 'مواسم العرض',
+                    'icon' => 'partly_cloudy_day',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) في مقدمة المتجر، مع تبديل تلقائي حسب التاريخ.',
+                ],
+            ],
+        ];
+
+        $filtered = [];
+        foreach ($groups as $title => $items) {
+            $visible = self::filterItems($user, $items);
+            if ($visible !== []) {
+                $filtered[$title] = $visible;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /** @return array<string, list<array<string, mixed>>> */
+    public static function siteContentGroups(?array $user): array
+    {
+        $groups = [
+            'الصفحة الرئيسية' => [
+                [
+                    'route' => '/dashboard/home-sections.php',
+                    'label' => 'أقسام الرئيسية',
+                    'icon' => 'home_storage',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
+                ],
+                [
+                    'route' => '/dashboard/home-layout.php',
+                    'label' => 'تخطيط الصفحة الرئيسية',
+                    'icon' => 'dashboard_customize',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'ترتيب أقسام الرئيسية وإظهارها وتعديل عناوينها وخياراتها.',
+                ],
+                [
+                    'route' => '/dashboard/home-shop-blocks.php',
+                    'label' => 'تسوّق حسب',
+                    'icon' => 'category',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الوصول السريع في الرئيسية: الفئة، النوع، الشركة، ودمجها معاً.',
                 ],
             ],
             'الوسائط والهوية' => [
@@ -471,6 +505,40 @@ final class DashboardNavigation
     }
 
     /** @return array<string, list<array<string, mixed>>> */
+    public static function merchandisingSidebarGroups(?array $user): array
+    {
+        $groups = self::merchandisingGroups($user);
+        if ($groups === []) {
+            return [];
+        }
+
+        return array_merge(
+            [
+                'عام' => [
+                    [
+                        'route' => '/dashboard/merchandising.php',
+                        'label' => 'نظرة عامة',
+                        'icon' => 'local_offer',
+                        'permission' => null,
+                    ],
+                ],
+            ],
+            $groups
+        );
+    }
+
+    public static function hasMerchandisingAccess(?array $user): bool
+    {
+        foreach (self::merchandisingGroups($user) as $items) {
+            if ($items !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return array<string, list<array<string, mixed>>> */
     public static function siteContentSidebarGroups(?array $user): array
     {
         $groups = self::siteContentGroups($user);
@@ -540,7 +608,9 @@ final class DashboardNavigation
 
     public static function hasBackOfficeAccess(?array $user): bool
     {
-        return self::hasSiteContentAccess($user) || self::hasConfigurationAccess($user);
+        return self::hasMerchandisingAccess($user)
+            || self::hasSiteContentAccess($user)
+            || self::hasConfigurationAccess($user);
     }
 
     public static function areaForRoute(string $route, ?array $user = null): string
@@ -557,8 +627,14 @@ final class DashboardNavigation
             return self::AREA_OPERATIONS;
         }
 
+        if (in_array($path, self::MERCHANDISING_ROUTES, true)) {
+            return self::AREA_MERCHANDISING;
+        }
         if (in_array($path, self::SITE_CONTENT_ROUTES, true)) {
             return self::AREA_SITE_CONTENT;
+        }
+        if ($path === '/dashboard/price-checker.php') {
+            return self::AREA_OPERATIONS;
         }
         if (in_array($path, self::CONFIGURATION_ROUTES, true)) {
             return self::AREA_CONFIGURATION;
@@ -574,6 +650,7 @@ final class DashboardNavigation
     public static function sidebarGroupsForArea(string $area, ?array $user): array
     {
         return match ($area) {
+            self::AREA_MERCHANDISING => self::merchandisingSidebarGroups($user),
             self::AREA_SITE_CONTENT => self::siteContentSidebarGroups($user),
             self::AREA_CONFIGURATION => self::configurationSidebarGroups($user),
             self::AREA_ACCOUNTING => self::accountingSidebarGroups($user),
@@ -655,6 +732,15 @@ final class DashboardNavigation
                 'area' => self::AREA_OPERATIONS,
             ],
         ];
+
+        if (self::hasMerchandisingAccess($user)) {
+            $tabs[] = [
+                'route' => '/dashboard/merchandising.php',
+                'label' => 'العروض والمخزون',
+                'icon' => 'local_offer',
+                'area' => self::AREA_MERCHANDISING,
+            ];
+        }
 
         if (self::hasSiteContentAccess($user)) {
             $tabs[] = [
