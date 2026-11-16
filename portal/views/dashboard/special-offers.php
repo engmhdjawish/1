@@ -15,15 +15,8 @@ use Portal\Support\PriceFx;
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $dbError */
-/** @var array{summary?: array<string, mixed>, materials?: list<array<string, mixed>>}|null $editOfferAnalytics */
-
 require __DIR__ . '/partials/token-picker.php';
 require __DIR__ . '/partials/media-picker.php';
-
-$editOfferAnalytics = is_array($editOfferAnalytics ?? null) ? $editOfferAnalytics : null;
-$fmtInt = static fn ($n): string => number_format((float) $n, 0);
-$fmtMoneyAr = static fn ($n, int $d = 0): string => number_format((float) $n, $d, '.', ',');
-
 
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
@@ -156,6 +149,10 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   <div class="flex flex-wrap items-center gap-3">
     <?php if (!$showForm): ?>
       <a href="/dashboard/special-offers.php?new=1&amp;tab=<?= urlencode((string) ($offerTab ?? 'active')) ?>" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">عرض جديد</a>
+      <a href="/dashboard/special-offers-campaigns.php" class="h-9 px-4 inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/5 text-xs font-extrabold text-primary hover:bg-primary/10">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">monitoring</span>
+        متابعة الحملات
+      </a>
       <a href="/dashboard/site-media.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">مكتبة الصور</a>
     <?php endif; ?>
     <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-20 text-center">
@@ -670,87 +667,16 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
     </details>
   <?php endif; ?>
 
-  <?php if ($editOfferAnalytics !== null && trim((string) ($editOffer['id'] ?? '')) !== ''): ?>
-    <?php
-      $an = is_array($editOfferAnalytics['summary'] ?? null) ? $editOfferAnalytics['summary'] : [];
-      $anMats = is_array($editOfferAnalytics['materials'] ?? null) ? $editOfferAnalytics['materials'] : [];
-    ?>
-    <article class="so-analytics bg-white border border-border-subtle rounded-xl p-4 mt-4">
-      <div class="flex flex-wrap items-end justify-between gap-2 mb-3">
-        <div>
-          <p class="text-[11px] font-bold text-primary tracking-wide">جدوى العرض</p>
-          <h3 class="font-extrabold text-slate-900 text-base">قياس التفاعل والمبيعات</h3>
-          <p class="text-xs text-text-muted mt-0.5">آخر 90 يوماً للمشاهدات · المبيعات من طلبات مرتبطة بهذا العرض</p>
-        </div>
+  <?php if (trim((string) ($editOffer['id'] ?? '')) !== ''): ?>
+    <article class="mt-4 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <p class="text-xs font-bold text-primary">متابعة الحملة</p>
+        <p class="text-sm text-slate-700 mt-0.5">القياس والمبيعات في صفحة منفصلة لمقارنة العروض وتتبّع سير الحملة.</p>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">طلبات</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['orders'] ?? 0)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">طرود مباعة</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['packages'] ?? 0, 1)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">إيراد ل.س</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtMoneyAr($an['revenue_syp'] ?? 0, 0)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">خصم ممنوح ل.س</div>
-          <div class="text-xl font-extrabold tabular-nums text-amber-800"><?= h($fmtMoneyAr($an['discount_syp'] ?? 0, 0)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">مشاهدات / صفحات</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['page_views'] ?? 0)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">إضافة للسلة</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['add_to_cart'] ?? 0)) ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">تحويل طلبات</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= isset($an['conversion_pct']) && $an['conversion_pct'] !== null ? h((string) $an['conversion_pct']) . '%' : '—' ?></div>
-        </div>
-        <div class="rounded-lg bg-surface-low border border-border-subtle p-3">
-          <div class="text-[11px] text-text-muted">مواد بيعت</div>
-          <div class="text-xl font-extrabold tabular-nums"><?= h($fmtInt($an['materials'] ?? 0)) ?></div>
-        </div>
-      </div>
-      <?php if ($anMats !== []): ?>
-        <div class="overflow-auto border border-border-subtle rounded-lg">
-          <table class="w-full text-sm min-w-[640px]">
-            <thead class="bg-surface-low text-text-muted">
-              <tr>
-                <th class="px-3 py-2 text-right font-bold">المادة</th>
-                <th class="px-3 py-2 text-right font-bold">طلبات</th>
-                <th class="px-3 py-2 text-right font-bold">طرود</th>
-                <th class="px-3 py-2 text-right font-bold">إيراد ل.س</th>
-                <th class="px-3 py-2 text-right font-bold">خصم ل.س</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle">
-              <?php foreach ($anMats as $mat): ?>
-                <?php if (!is_array($mat)) continue; ?>
-                <tr>
-                  <td class="px-3 py-2">
-                    <div class="font-bold"><?= h((string) ($mat['material_name_ar'] ?? $mat['material_guid'] ?? '')) ?></div>
-                    <?php if (!empty($mat['material_code'])): ?>
-                      <div class="text-[11px] text-text-muted"><?= h((string) $mat['material_code']) ?></div>
-                    <?php endif; ?>
-                  </td>
-                  <td class="px-3 py-2 tabular-nums"><?= h($fmtInt($mat['orders'] ?? 0)) ?></td>
-                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['packages'] ?? 0, 1)) ?></td>
-                  <td class="px-3 py-2 tabular-nums"><?= h($fmtMoneyAr($mat['revenue_syp'] ?? 0, 0)) ?></td>
-                  <td class="px-3 py-2 tabular-nums text-amber-800"><?= h($fmtMoneyAr($mat['discount_syp'] ?? 0, 0)) ?></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php else: ?>
-        <p class="text-xs text-text-muted">لا مبيعات مرتبطة بهذا العرض بعد.</p>
-      <?php endif; ?>
+      <a href="/dashboard/special-offers-campaigns.php?offer=<?= urlencode((string) $editOffer['id']) ?>" class="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110 shrink-0">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">monitoring</span>
+        فتح قياس الحملة
+      </a>
     </article>
   <?php endif; ?>
 </form>

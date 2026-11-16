@@ -60,6 +60,7 @@ final class VisitorLogService
         'share-links.php' => 'روابط المشاركة',
         'material-images.php' => 'صور المواد',
         'special-offers.php' => 'العروض',
+        'special-offers-campaigns.php' => 'متابعة حملات العروض',
         'home-sections.php' => 'أقسام الرئيسية',
         'price-checker.php' => 'فاحص الأسعار',
         'profile.php' => 'الملف الشخصي',
