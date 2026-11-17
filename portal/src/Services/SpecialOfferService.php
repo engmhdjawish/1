@@ -661,7 +661,7 @@ final class SpecialOfferService
                 $materialGuids,
                 $selectionMode === 'manual' ? $productOverrides : []
             );
-            self::syncOfferNotification($id);
+            self::syncOfferNotification($id, !empty($payload['notify_customers']));
         } catch (\Throwable $e) {
             return [
                 'ok' => false,
@@ -803,14 +803,51 @@ final class SpecialOfferService
         $stmt = Database::pdo()->prepare('UPDATE special_offers SET is_active = :active WHERE id = :id');
         $stmt->execute(['id' => $id, 'active' => $active ? 'true' : 'false']);
         $updated = $stmt->rowCount() > 0;
-        if ($updated) {
-            self::syncOfferNotification($id);
+        if ($updated && !$active) {
+            NotificationService::syncSpecialOfferNotification([
+                'id' => $id,
+                'is_active' => false,
+            ]);
         }
 
         return $updated;
     }
 
-    private static function syncOfferNotification(string $id): void
+  /**
+   * Send customer notification when scheduled offers reach their start time (once per offer).
+   */
+    public static function publishDueScheduledOfferNotifications(): void
+    {
+        static $ran = false;
+        if ($ran) {
+            return;
+        }
+        $ran = true;
+
+        try {
+            $stmt = Database::pdo()->query(
+                'SELECT id::text AS id, slug, title_ar, subtitle_ar,
+                        starts_at::text AS starts_at, ends_at::text AS ends_at, is_active
+                 FROM special_offers
+                 WHERE is_active = TRUE
+                   AND starts_at IS NOT NULL
+                   AND starts_at <= NOW()
+                   AND starts_at >= NOW() - interval \'21 days\'
+                   AND (ends_at IS NULL OR ends_at > NOW())'
+            );
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as $row) {
+                $id = trim((string) ($row['id'] ?? ''));
+                if ($id === '' || NotificationService::hasOpenOfferNotification($id)) {
+                    continue;
+                }
+                NotificationService::syncSpecialOfferNotification($row, true);
+            }
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function syncOfferNotification(string $id, bool $allowBroadcast = false): void
     {
         $id = trim($id);
         if ($id === '') {
@@ -819,7 +856,8 @@ final class SpecialOfferService
 
         try {
             $stmt = Database::pdo()->prepare(
-                'SELECT id::text AS id, slug, title_ar, subtitle_ar, ends_at::text AS ends_at, is_active
+                'SELECT id::text AS id, slug, title_ar, subtitle_ar,
+                        starts_at::text AS starts_at, ends_at::text AS ends_at, is_active
                  FROM special_offers
                  WHERE id = :id
                  LIMIT 1'
@@ -834,7 +872,7 @@ final class SpecialOfferService
 
                 return;
             }
-            NotificationService::syncSpecialOfferNotification($row);
+            NotificationService::syncSpecialOfferNotification($row, $allowBroadcast);
         } catch (\Throwable) {
         }
     }

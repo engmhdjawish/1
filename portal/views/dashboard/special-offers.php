@@ -305,6 +305,22 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
           <input type="checkbox" name="option_show_images" <?= $showImages ? 'checked' : '' ?> class="rounded border-border-subtle text-primary">
           <span>إظهار الصور للعميل</span>
         </label>
+        <?php
+          $startsTs = strtotime((string) ($editOffer['starts_at'] ?? ''));
+          $offerIsLive = $startsTs !== false && $startsTs <= time();
+          $showNotifyCheckbox = !$isNew && !empty($editOffer['is_active']) && $offerIsLive;
+        ?>
+        <?php if ($showNotifyCheckbox): ?>
+          <label class="inline-flex items-start gap-1.5 max-w-md">
+            <input type="checkbox" name="notify_customers" value="1" class="rounded border-border-subtle text-primary mt-0.5">
+            <span>إرسال إشعار للعملاء الآن (اختياري — الحفظ وحده لا يبث إشعاراً)</span>
+          </label>
+        <?php endif; ?>
+        <?php if ($isNew || ($startsTs !== false && $startsTs > time())): ?>
+          <p class="text-[11px] text-text-muted w-full basis-full">
+            العروض المجدولة: يُرسل إشعار العملاء تلقائياً عند بداية العرض فقط، وليس عند الحفظ.
+          </p>
+        <?php endif; ?>
       </div>
       <div class="md:col-span-3">
         <?php $renderMediaPickerField('بانر (اختياري)', 'banner_image_url', (string) ($editOffer['banner_image_url'] ?? ''), 'so-banner', 'banner'); ?>

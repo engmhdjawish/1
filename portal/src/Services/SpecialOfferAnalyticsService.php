@@ -134,12 +134,16 @@ final class SpecialOfferAnalyticsService
                              WHERE sop.offer_id = :offer_id
                                AND LOWER(TRIM(sop.material_guid::text)) = LOWER(TRIM(oi.material_guid::text))
                            )
-                           AND o.created_at >= so.starts_at
-                           AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
-                           AND ' . self::discountedLineSql('oi') . '
-                         )
+                       AND o.created_at >= so.starts_at
+                       AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
+                       AND (
+                         ' . self::discountedLineSql('oi') . '
+                         OR ' . self::orderOfferSessionSql('o', 'so') . '
+                         OR so.selection_mode::text = \'filter\'
                        )
-                     GROUP BY oi.material_guid
+                     )
+                   )
+                 GROUP BY oi.material_guid
                      ORDER BY packages DESC, revenue_syp DESC
                      LIMIT 48'
                 );
@@ -204,7 +208,11 @@ final class SpecialOfferAnalyticsService
                        )
                        AND o.created_at >= so.starts_at
                        AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
-                       AND ' . self::discountedLineSql('oi') . '
+                       AND (
+                         ' . self::discountedLineSql('oi') . '
+                         OR ' . self::orderOfferSessionSql('o', 'so') . '
+                         OR so.selection_mode::text = \'filter\'
+                       )
                      )
                    )
                  GROUP BY o.id, o.order_number, o.status, o.created_at, o.guest_name_ar, o.guest_phone
@@ -399,7 +407,7 @@ final class SpecialOfferAnalyticsService
                    AND EXISTS (
                      SELECT 1
                      FROM visitor_logs vl
-                     WHERE vl.visitor_session_id = o.visitor_session_id
+                     WHERE vl.session_id = o.visitor_session_id
                        AND vl.created_at <= o.created_at + interval \'5 minutes\'
                        AND vl.created_at >= o.created_at - interval \'30 days\'
                        AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\')
@@ -407,6 +415,15 @@ final class SpecialOfferAnalyticsService
                          (vl.details_ar LIKE \'{%\' AND vl.details_ar::jsonb->>\'offer_slug\' = so.slug)
                          OR vl.details_ar ILIKE \'%"offer_slug":"\' || so.slug || \'"%\'
                        )
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM order_items oi2
+                     INNER JOIN special_offer_products sop2 ON sop2.offer_id = so.id
+                       AND lower(trim(sop2.material_guid::text)) = lower(trim(oi2.material_guid::text))
+                     WHERE oi2.order_id = o.id
+                       AND oi2.special_offer_id IS NULL
+                       AND ' . self::discountedLineSql('oi2') . '
                    )
                    AND (
                      so.selection_mode::text = \'filter\'
@@ -443,6 +460,29 @@ final class SpecialOfferAnalyticsService
         } catch (\Throwable) {
             // visitor_logs / visitor_session_id may be absent
         }
+    }
+
+    /** SQL: order visited this offer (visitor_logs.session_id = orders.visitor_session_id). */
+    private static function orderOfferSessionSql(string $orderAlias, string $offerAlias): string
+    {
+        if (!VisitorLogService::ordersHaveVisitorSessionColumn()) {
+            return 'FALSE';
+        }
+
+        return 'EXISTS (
+            SELECT 1
+            FROM visitor_logs vl
+            WHERE vl.session_id = ' . $orderAlias . '.visitor_session_id
+              AND btrim(' . $orderAlias . '.visitor_session_id) <> \'\'
+              AND vl.created_at <= ' . $orderAlias . '.created_at + interval \'5 minutes\'
+              AND vl.created_at >= ' . $orderAlias . '.created_at - interval \'30 days\'
+              AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\', \'order_placed\')
+              AND (
+                (vl.details_ar LIKE \'{%\' AND vl.details_ar::jsonb->>\'offer_slug\' = ' . $offerAlias . '.slug)
+                OR vl.details_ar ILIKE \'%"offer_slug":"\' || ' . $offerAlias . '.slug || \'"%\'
+                OR vl.referer ILIKE \'%offer=\' || ' . $offerAlias . '.slug || \'%\'
+              )
+        )';
     }
 
     private static function discountedLineSql(string $alias): string

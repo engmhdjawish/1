@@ -268,7 +268,8 @@ final class VisitorLogService
         ?string $webCustomerId,
         string $guestNameAr,
         string $guestPhone,
-        ?array $customer = null
+        ?array $customer = null,
+        ?string $offerSlug = null
     ): void {
         if (!self::hasSchema() || trim($sessionId) === '' || trim($orderId) === '') {
             return;
@@ -280,6 +281,18 @@ final class VisitorLogService
             ? ('طلب جديد: ' . $guestNameAr . ($orderNumber !== '' ? ' (' . $orderNumber . ')' : ''))
             : ('طلب جديد' . ($orderNumber !== '' ? ': ' . $orderNumber : ''));
 
+        $meta = [
+            'order_id' => $orderId,
+            'order_number' => $orderNumber,
+            'guest_name' => $guestNameAr,
+            'guest_phone' => $guestPhone,
+            'label_ar' => $label,
+        ];
+        $offerSlug = trim((string) ($offerSlug ?? ''));
+        if ($offerSlug !== '') {
+            $meta['offer_slug'] = $offerSlug;
+        }
+
         self::recordEvent(
             $sessionId,
             'order_placed',
@@ -287,13 +300,7 @@ final class VisitorLogService
             'إرسال طلب',
             '',
             $customer,
-            [
-                'order_id' => $orderId,
-                'order_number' => $orderNumber,
-                'guest_name' => $guestNameAr,
-                'guest_phone' => $guestPhone,
-                'label_ar' => $label,
-            ]
+            $meta
         );
     }
 
@@ -2883,7 +2890,7 @@ final class VisitorLogService
             $stmt = Database::pdo()->prepare(
                 'SELECT details_ar
                  FROM visitor_logs
-                 WHERE visitor_session_id = :session_id
+                 WHERE session_id = :session_id
                    AND action IN (\'add_to_cart\', \'page_view\', \'product_view\')
                    ' . $beforeSql . '
                  ORDER BY created_at DESC

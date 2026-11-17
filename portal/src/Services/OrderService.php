@@ -400,6 +400,28 @@ final class OrderService
             if ($webCustomerId !== null && trim($webCustomerId) !== '') {
                 $customerPayload = ['id' => trim($webCustomerId), 'name_ar' => $guestNameAr, 'phone' => $guestPhone];
             }
+            $logOfferSlug = $storeOfferSlug;
+            if ($logOfferSlug === '') {
+                foreach ($normalizedItems as $line) {
+                    $logOfferSlug = trim((string) ($line['added_store_offer'] ?? $line['offer_slug'] ?? ''));
+                    if ($logOfferSlug !== '') {
+                        break;
+                    }
+                    $logOfferSlug = trim((string) ($line['special_offer_id'] ?? ''));
+                    if ($logOfferSlug !== '') {
+                        try {
+                            $slugRow = Database::pdo()->prepare('SELECT slug FROM special_offers WHERE id = :id LIMIT 1');
+                            $slugRow->execute(['id' => $logOfferSlug]);
+                            $logOfferSlug = trim((string) ($slugRow->fetchColumn() ?: ''));
+                        } catch (\Throwable) {
+                            $logOfferSlug = '';
+                        }
+                        if ($logOfferSlug !== '') {
+                            break;
+                        }
+                    }
+                }
+            }
             VisitorLogService::recordOrderPlaced(
                 $visitorSessionId,
                 $orderId,
@@ -407,7 +429,8 @@ final class OrderService
                 $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
                 $guestNameAr,
                 $guestPhone,
-                $customerPayload
+                $customerPayload,
+                $logOfferSlug !== '' ? $logOfferSlug : null
             );
         }
 

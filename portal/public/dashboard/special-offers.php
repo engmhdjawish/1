@@ -146,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? (is_array($_POST['material_override'] ?? null) ? $_POST['material_override'] : [])
                     : [],
                 'display_options' => $buildDisplayOptions(),
+                'notify_customers' => isset($_POST['notify_customers']),
             ];
             $result = SpecialOfferService::save($payload, isset($user['id']) ? (string) $user['id'] : null);
             $flash = $result['message'];
