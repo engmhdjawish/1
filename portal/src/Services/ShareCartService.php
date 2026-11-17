@@ -724,8 +724,9 @@ final class ShareCartService
     /** @param array<string, mixed> $line */
     public static function enrichLineWithOffer(array $line): array
     {
-        if (!empty($line['has_offer']) && trim((string) ($line['offer_badge'] ?? '')) !== '') {
-            return $line;
+        $existingOfferId = trim((string) ($line['special_offer_id'] ?? ''));
+        if ($existingOfferId !== '' && !empty($line['has_offer'])) {
+            return self::normalizeLine($line);
         }
 
         $guid = trim((string) ($line['material_guid'] ?? ''));
@@ -738,7 +739,15 @@ final class ShareCartService
             return $line;
         }
 
-        $overlay = SpecialOfferService::pricingOverlay($product);
+        $offerSlug = trim((string) ($line['added_store_offer'] ?? ''));
+        if ($offerSlug === '') {
+            $offerSlug = trim((string) ($line['offer_slug'] ?? ''));
+        }
+        $overlay = SpecialOfferService::pricingOverlay(
+            $product,
+            null,
+            $offerSlug !== '' ? $offerSlug : null
+        );
         if (empty($overlay['has_offer']) || !is_array($overlay['offer'] ?? null)) {
             return $line;
         }

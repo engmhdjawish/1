@@ -110,6 +110,24 @@ $assert(
     abs((float) ($applied['unit_sale_price_sp'] ?? 0) - 800.0) < 0.001
         && abs((float) ($applied['original_unit_sale_price_sp'] ?? 0) - 1000.0) < 0.001
         && abs((float) ($applied['sale_price_sp'] ?? 0) - 8000.0) < 0.001
+        && (string) ($applied['special_offer_id'] ?? '') === 'offer-1'
+);
+
+$badgeOnlyLine = array_merge($cartLine, [
+    'has_offer' => true,
+    'offer_badge' => 'خصم',
+]);
+unset($badgeOnlyLine['special_offer_id']);
+$enriched = ShareCartService::enrichLineWithOffer(array_merge($badgeOnlyLine, [
+    'offer' => $offer,
+    'material_guid' => 'mat-1',
+    'name' => 'مادة تجريبية',
+]));
+// enrichLineWithOffer must not skip when special_offer_id is missing (DB catalog path uses findMaterial).
+$shareCart = (string) file_get_contents(dirname(__DIR__) . '/src/Services/ShareCartService.php');
+$assert(
+    'enrichLineWithOffer requires special_offer_id before short-circuit',
+    str_contains($shareCart, 'existingOfferId') && !preg_match('/has_offer.*offer_badge.*return \$line/s', $shareCart)
 );
 
 $amountOffer = [

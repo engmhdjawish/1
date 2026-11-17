@@ -883,23 +883,26 @@ final class SpecialOfferService
     {
         if (!empty($material['has_offer'])
             && isset($material['effective_unit_sale_price_sp'], $material['original_unit_sale_price_sp'])) {
-            return array_merge([
-                'has_offer' => true,
-                'offer' => is_array($material['offer'] ?? null) ? $material['offer'] : null,
-                'offer_badge' => trim((string) ($material['offer_badge'] ?? '')),
-                'offer_slug' => trim((string) ($material['offer_slug'] ?? '')),
-            ], array_intersect_key($material, array_flip([
-                'original_unit_sale_price_sp',
-                'original_unit_sale_price_usd',
-                'original_package_sale_price_sp',
-                'original_package_sale_price_usd',
-                'effective_unit_sale_price_sp',
-                'effective_unit_sale_price_usd',
-                'effective_package_sale_price_sp',
-                'effective_package_sale_price_usd',
-                'unitSalePriceSyp',
-                'unitSalePriceUsd',
-            ])));
+            $embeddedOffer = is_array($material['offer'] ?? null) ? $material['offer'] : null;
+            if ($embeddedOffer !== null) {
+                return array_merge([
+                    'has_offer' => true,
+                    'offer' => $embeddedOffer,
+                    'offer_badge' => trim((string) ($material['offer_badge'] ?? '')),
+                    'offer_slug' => trim((string) ($material['offer_slug'] ?? '')),
+                ], array_intersect_key($material, array_flip([
+                    'original_unit_sale_price_sp',
+                    'original_unit_sale_price_usd',
+                    'original_package_sale_price_sp',
+                    'original_package_sale_price_usd',
+                    'effective_unit_sale_price_sp',
+                    'effective_unit_sale_price_usd',
+                    'effective_package_sale_price_sp',
+                    'effective_package_sale_price_usd',
+                    'unitSalePriceSyp',
+                    'unitSalePriceUsd',
+                ])));
+            }
         }
 
         $guid = trim((string) (

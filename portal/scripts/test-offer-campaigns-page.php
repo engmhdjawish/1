@@ -42,5 +42,10 @@ $assert('offers role sees campaigns in merchandising', in_array('/dashboard/spec
 $assert('campaigns route maps to merchandising area', DashboardNavigation::areaForRoute('/dashboard/special-offers-campaigns.php') === DashboardNavigation::AREA_MERCHANDISING);
 $assert('price checker maps to operations', DashboardNavigation::areaForRoute('/dashboard/price-checker.php') === DashboardNavigation::AREA_OPERATIONS);
 $assert('view closure use clause is valid', !preg_match('/use\s*\([^)]*=\s*null/', $campaignsView));
+$analyticsSrc = (string) file_get_contents($root . '/src/Services/SpecialOfferAnalyticsService.php');
+$assert('analytics merges inferred sales', str_contains($analyticsSrc, 'mergeInferredSummaries'));
+$assert('analytics lists recent orders', str_contains($analyticsSrc, 'recentOrdersForOffer'));
+$orderSrc = (string) file_get_contents($root . '/src/Services/OrderService.php');
+$assert('orders enrich cart lines before save', str_contains($orderSrc, 'enrichLineWithOffer'));
 
 echo "All offer campaigns checks passed.\n";
