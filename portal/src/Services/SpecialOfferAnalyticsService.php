@@ -410,10 +410,11 @@ final class SpecialOfferAnalyticsService
                      WHERE vl.session_id = o.visitor_session_id
                        AND vl.created_at <= o.created_at + interval \'5 minutes\'
                        AND vl.created_at >= o.created_at - interval \'30 days\'
-                       AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\')
+                       AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\', \'order_placed\')
                        AND (
                          (vl.details_ar LIKE \'{%\' AND vl.details_ar::jsonb->>\'offer_slug\' = so.slug)
                          OR vl.details_ar ILIKE \'%"offer_slug":"\' || so.slug || \'"%\'
+                         OR vl.referer ILIKE \'%offer=\' || so.slug || \'%\'
                        )
                    )
                    AND NOT EXISTS (
@@ -517,6 +518,8 @@ final class SpecialOfferAnalyticsService
                 : 'NULL::text';
             $stmt = $pdo->prepare(
                 'SELECT oi.id::text AS item_id,
+                        o.id::text AS order_id,
+                        o.order_number,
                         oi.material_guid::text AS material_guid,
                         oi.sale_price_sp, oi.sale_price_usd,
                         oi.original_sale_price_sp, oi.original_sale_price_usd,
@@ -560,12 +563,18 @@ final class SpecialOfferAnalyticsService
                     'original_sale_price_usd' => isset($row['original_sale_price_usd']) ? (float) $row['original_sale_price_usd'] : null,
                 ];
                 $sessionId = trim((string) ($row['visitor_session_id'] ?? ''));
+                $orderId = trim((string) ($row['order_id'] ?? ''));
+                $orderNumber = trim((string) ($row['order_number'] ?? ''));
+                if ($sessionId === '') {
+                    $sessionId = VisitorLogService::sessionIdForOrder($orderId, $orderNumber) ?? '';
+                }
+                $storeSlug = VisitorLogService::offerSlugForOrder($orderId, $orderNumber, $sessionId, $orderedAt);
                 $enriched = ShareCartService::attributeOfferOnLine(
                     array_merge($line, [
                         'material_guid' => $guid,
                         'quantity' => 1.0,
                     ]),
-                    null,
+                    $storeSlug !== '' && $storeSlug !== null ? $storeSlug : null,
                     $sessionId !== '' ? $sessionId : null,
                     $orderedAt
                 );
@@ -594,6 +603,213 @@ final class SpecialOfferAnalyticsService
         } catch (\Throwable) {
             // optional columns / missing tables on older installs
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function diagnoseOrderForOffer(string $orderNumber, string $offerSlug): array
+    {
+        $orderNumber = trim($orderNumber);
+        $offerSlug = trim($offerSlug);
+        $out = [
+            'ok' => false,
+            'order_number' => $orderNumber,
+            'offer_slug' => $offerSlug,
+            'issues' => [],
+            'lines' => [],
+        ];
+        if ($orderNumber === '' || $offerSlug === '') {
+            $out['issues'][] = 'order_number or offer_slug missing';
+
+            return $out;
+        }
+
+        try {
+            $orderStmt = Database::pdo()->prepare(
+                'SELECT id::text AS id, order_number, status, created_at::text AS created_at,
+                        visitor_session_id
+                 FROM orders
+                 WHERE order_number = :num
+                 LIMIT 1'
+            );
+            $orderStmt->execute(['num' => $orderNumber]);
+            $order = $orderStmt->fetch(PDO::FETCH_ASSOC);
+            if ($order === false) {
+                $out['issues'][] = 'order not found';
+
+                return $out;
+            }
+
+            $offerStmt = Database::pdo()->prepare(
+                'SELECT id::text AS id, slug, title_ar, is_active, starts_at::text AS starts_at, ends_at::text AS ends_at
+                 FROM special_offers
+                 WHERE slug = :slug
+                 LIMIT 1'
+            );
+            $offerStmt->execute(['slug' => $offerSlug]);
+            $offer = $offerStmt->fetch(PDO::FETCH_ASSOC);
+            if ($offer === false) {
+                $out['issues'][] = 'offer slug not found';
+
+                return $out;
+            }
+
+            $orderId = (string) ($order['id'] ?? '');
+            $sessionId = trim((string) ($order['visitor_session_id'] ?? ''));
+            $orderedAt = (string) ($order['created_at'] ?? '');
+            if ($sessionId === '') {
+                $sessionId = VisitorLogService::sessionIdForOrder($orderId, $orderNumber) ?? '';
+                $out['issues'][] = 'orders.visitor_session_id was empty'
+                    . ($sessionId !== '' ? ' (recovered from visitor_logs)' : ' (no order_placed log)');
+            }
+
+            $logSlug = VisitorLogService::offerSlugForOrder($orderId, $orderNumber, $sessionId, $orderedAt);
+            $out['order'] = $order;
+            $out['offer'] = $offer;
+            $out['session_id'] = $sessionId;
+            $out['dominant_offer_slug_in_session'] = $logSlug;
+
+            $lines = Database::pdo()->prepare(
+                'SELECT id::text AS id, material_guid::text AS material_guid,
+                        special_offer_id::text AS special_offer_id,
+                        sale_price_sp, sale_price_usd,
+                        original_sale_price_sp, original_sale_price_usd
+                 FROM order_items WHERE order_id = :oid'
+            );
+            $lines->execute(['oid' => $orderId]);
+            foreach ($lines->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $expectedId = (string) ($offer['id'] ?? '');
+                $linkedId = trim((string) ($row['special_offer_id'] ?? ''));
+                $out['lines'][] = array_merge($row, [
+                    'matches_offer' => $linkedId !== '' && $linkedId === $expectedId,
+                    'needs_link' => $linkedId === '' || $linkedId !== $expectedId,
+                ]);
+            }
+
+            $offerId = (string) ($offer['id'] ?? '');
+            $linkedCount = count(array_filter(
+                $out['lines'],
+                static fn (array $l): bool => trim((string) ($l['special_offer_id'] ?? '')) === $offerId
+            ));
+            $out['linked_line_count'] = $linkedCount;
+            $out['ok'] = $linkedCount > 0;
+
+            return $out;
+        } catch (\Throwable $e) {
+            $out['issues'][] = $e->getMessage();
+
+            return $out;
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, updated: int, diagnose?: array<string, mixed>}
+     */
+    public static function repairOrderForOfferSlug(string $orderNumber, string $offerSlug, bool $apply = true): array
+    {
+        $diagnose = self::diagnoseOrderForOffer($orderNumber, $offerSlug);
+        if ($diagnose['order'] ?? null === null || $diagnose['offer'] ?? null === null) {
+            return [
+                'ok' => false,
+                'message' => implode('; ', $diagnose['issues'] ?? ['not found']),
+                'updated' => 0,
+                'diagnose' => $diagnose,
+            ];
+        }
+
+        $order = $diagnose['order'];
+        $offerSlug = trim($offerSlug);
+        $orderedAt = (string) ($order['created_at'] ?? '');
+        $orderId = (string) ($order['id'] ?? '');
+        $sessionId = (string) ($diagnose['session_id'] ?? '');
+
+        $offer = SpecialOfferService::activeOfferBySlug($offerSlug);
+        if ($offer === null) {
+            foreach (SpecialOfferService::offersForOrderInstant($orderedAt) as $candidate) {
+                if (strcasecmp(trim((string) ($candidate['slug'] ?? '')), $offerSlug) === 0) {
+                    $offer = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($offer === null) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر تحميل بيانات العرض النشطة في وقت الطلب.',
+                'updated' => 0,
+                'diagnose' => $diagnose,
+            ];
+        }
+
+        if ($apply && $sessionId !== '' && trim((string) ($order['visitor_session_id'] ?? '')) === '') {
+            try {
+                Database::pdo()->prepare(
+                    'UPDATE orders SET visitor_session_id = :sid WHERE id = :oid AND (visitor_session_id IS NULL OR btrim(visitor_session_id) = \'\')'
+                )->execute(['sid' => substr($sessionId, 0, 120), 'oid' => $orderId]);
+            } catch (\Throwable) {
+            }
+        }
+
+        $updated = 0;
+        $update = Database::pdo()->prepare(
+            'UPDATE order_items SET
+                special_offer_id = :offer_id,
+                original_sale_price_sp = COALESCE(original_sale_price_sp, :orig_sp),
+                original_sale_price_usd = COALESCE(original_sale_price_usd, :orig_usd)
+             WHERE id = :id'
+        );
+
+        foreach ($diagnose['lines'] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $guid = trim((string) ($row['material_guid'] ?? ''));
+            $itemId = trim((string) ($row['id'] ?? ''));
+            if ($guid === '' || $itemId === '') {
+                continue;
+            }
+
+            $line = [
+                'material_guid' => $guid,
+                'sale_price_sp' => (float) ($row['sale_price_sp'] ?? 0),
+                'sale_price_usd' => (float) ($row['sale_price_usd'] ?? 0),
+                'original_sale_price_sp' => isset($row['original_sale_price_sp']) ? (float) $row['original_sale_price_sp'] : null,
+                'original_sale_price_usd' => isset($row['original_sale_price_usd']) ? (float) $row['original_sale_price_usd'] : null,
+                'quantity' => 1.0,
+            ];
+
+            $enriched = ShareCartService::attributeOfferOnLine($line, $offerSlug, $sessionId !== '' ? $sessionId : null, $orderedAt);
+            $offerId = trim((string) ($enriched['special_offer_id'] ?? ''));
+            if ($offerId === '') {
+                $offerId = (string) ($offer['id'] ?? '');
+            }
+            if ($offerId === '') {
+                continue;
+            }
+
+            if (!$apply) {
+                $updated++;
+                continue;
+            }
+
+            $update->execute([
+                'id' => $itemId,
+                'offer_id' => $offerId,
+                'orig_sp' => $enriched['original_sale_price_sp'] ?? $line['original_sale_price_sp'],
+                'orig_usd' => $enriched['original_sale_price_usd'] ?? $line['original_sale_price_usd'],
+            ]);
+            $updated += $update->rowCount();
+        }
+
+        return [
+            'ok' => $updated > 0,
+            'message' => $apply
+                ? ($updated > 0 ? 'تم ربط ' . $updated . ' سطراً بالعرض.' : 'لم يُربط أي سطر — راجع التشخيص.')
+                : 'معاينة: ' . $updated . ' سطراً يمكن ربطها.',
+            'updated' => $updated,
+            'diagnose' => $diagnose,
+        ];
     }
 
     /**

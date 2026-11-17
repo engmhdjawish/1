@@ -54,6 +54,8 @@ $visitorLog = (string) file_get_contents($root . '/src/Services/VisitorLogServic
 $assert('visitor log offer slug uses session_id column', str_contains($visitorLog, 'WHERE session_id = :session_id'));
 $offerSvc = (string) file_get_contents($root . '/src/Services/SpecialOfferService.php');
 $assert('scheduled offer notifications deferred', str_contains($offerSvc, 'publishDueScheduledOfferNotifications'));
+$assert('order repair script exists', is_file($root . '/scripts/repair-offer-order.php'));
+$assert('session lookup for order_placed logs', str_contains($visitorLog, 'sessionIdForOrder'));
 $shareCart = (string) file_get_contents($root . '/src/Services/ShareCartService.php');
 $assert('cart lines attribute offer from session slug', str_contains($shareCart, 'attributeOfferOnLine'));
 $assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
