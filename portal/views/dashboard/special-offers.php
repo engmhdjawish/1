@@ -445,16 +445,16 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
     </div>
 
-    <div id="per-material-pricing-panel" class="so-invoice mt-3<?= $showManualInvoice ? '' : ' hidden' ?><?= $invoiceIsPriced ? '' : ' so-invoice--unified' ?>">
+    <div id="per-material-pricing-panel" class="so-invoice mt-3<?= $showManualInvoice ? '' : ' hidden' ?><?= $invoiceIsPriced ? '' : ' so-invoice--unified' ?>" data-so-offer-preview-root>
       <div class="so-invoice__head">
         <div>
           <p class="so-invoice__kicker" data-so-invoice-kicker><?= $invoiceIsPriced ? 'فاتورة العرض' : 'مواد العرض' ?></p>
           <h4 class="so-invoice__title" data-so-invoice-title><?= $invoiceIsPriced ? 'مواد العرض وأسعارها' : 'المواد المشمولة بالعرض' ?></h4>
           <p class="so-invoice__hint" data-so-invoice-hint>
             <?php if ($invoiceIsPriced): ?>
-              الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.
+              الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. اضغط الصورة المصغّرة لتكبيرها وتعديل الخصم.
             <?php else: ?>
-              أضف مواداً من البحث أعلاه. الحسم الموحّد من أعلى النموذج يُطبَّق على كل المواد — يمكن ضبط كمية العرض لكل مادة.
+              أضف مواداً من البحث أعلاه. اضغط الصورة لتكبيرها وتعديل كمية العرض.
             <?php endif; ?>
           </p>
         </div>
@@ -510,9 +510,23 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                   $name = (string) ($meta['name'] ?? $guid);
                   $code = (string) ($meta['code'] ?? '');
                   $image = (string) ($meta['image'] ?? '');
+                  $zoomImage = $image !== '' ? material_image_zoom_url($image) : '';
+                  $offerPreviewPayload = json_encode([
+                      'guid' => $guid,
+                      'name' => $name,
+                      'code' => $code,
+                      'thumbUrl' => $image,
+                      'zoomUrl' => $zoomImage !== '' ? $zoomImage : $image,
+                      'previewContext' => 'offer',
+                      'hasOffer' => true,
+                      'showPrice' => true,
+                  ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?: '{}';
                 ?>
                 <tr
                   class="so-invoice__row"
+                  data-so-offer-preview-line
+                  data-preview-guid="<?= h($guid) ?>"
+                  data-preview="<?= h($offerPreviewPayload) ?>"
                   data-override-guid="<?= h($guid) ?>"
                   data-sale-usd="<?= $saleUsd !== null ? h((string) $saleUsd) : '' ?>"
                   data-purchase-usd="<?= $purchaseUsd !== null ? h((string) $purchaseUsd) : '' ?>"
@@ -521,13 +535,14 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                   <td class="so-invoice__num"><?= (int) $idx + 1 ?></td>
                   <td class="so-invoice__material">
                     <div class="so-invoice__material-inner">
-                      <span class="so-invoice__thumb<?= $image === '' ? ' is-empty' : '' ?>">
-                        <?php if ($image !== ''): ?>
+                      <?php if ($image !== ''): ?>
+                        <button type="button" class="so-invoice__thumb so-invoice__thumb--zoom" data-store-product-preview title="تكبير الصورة وتعديل الخصم">
                           <img src="<?= h($image) ?>" alt="" loading="lazy">
-                        <?php else: ?>
-                          صورة
-                        <?php endif; ?>
-                      </span>
+                          <span class="so-invoice__thumb-zoom material-symbols-outlined" aria-hidden="true">zoom_in</span>
+                        </button>
+                      <?php else: ?>
+                        <span class="so-invoice__thumb is-empty">صورة</span>
+                      <?php endif; ?>
                       <span class="so-invoice__material-text">
                         <span class="so-invoice__name"><?= h($name) ?></span>
                         <?php if ($code !== ''): ?>
