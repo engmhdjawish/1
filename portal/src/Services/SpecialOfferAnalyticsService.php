@@ -24,6 +24,8 @@ final class SpecialOfferAnalyticsService
         $includeEngagement = !empty($options['include_engagement']);
         $days = max(1, min(365, (int) ($options['days'] ?? 90)));
         if (empty($options['skip_backfill'])) {
+            VisitorLogService::backfillOrdersVisitorSessionFromLogs($days);
+            self::bulkPersistOfferLinksFromLogs($days);
             self::backfillRecentOrderAttribution($days);
         }
         $offerIds = self::normalizeOfferIds($offerIds);
@@ -138,7 +140,7 @@ final class SpecialOfferAnalyticsService
                        AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
                        AND (
                          ' . self::discountedLineSql('oi') . '
-                         OR ' . self::orderOfferSessionSql('o', 'so') . '
+                         OR ' . self::orderOfferEvidenceSql('o', 'so') . '
                          OR so.selection_mode::text = \'filter\'
                        )
                      )
@@ -210,7 +212,7 @@ final class SpecialOfferAnalyticsService
                        AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
                        AND (
                          ' . self::discountedLineSql('oi') . '
-                         OR ' . self::orderOfferSessionSql('o', 'so') . '
+                         OR ' . self::orderOfferEvidenceSql('o', 'so') . '
                          OR so.selection_mode::text = \'filter\'
                        )
                      )
@@ -344,7 +346,10 @@ final class SpecialOfferAnalyticsService
                    AND o.status NOT IN (\'cancelled\', \'rejected\')
                    AND o.created_at >= so.starts_at
                    AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
-                   AND ' . self::discountedLineSql('oi') . '
+                   AND (
+                     ' . self::discountedLineSql('oi') . '
+                     OR ' . self::orderOfferEvidenceSql('o', 'so') . '
+                   )
                  GROUP BY so.id'
             );
             $inferred->execute($params);
@@ -357,7 +362,7 @@ final class SpecialOfferAnalyticsService
                 if ($inferredOrders === 0) {
                     continue;
                 }
-                $out[$id]['orders_inferred'] = $inferredOrders;
+                $out[$id]['orders_inferred'] = (int) ($out[$id]['orders_inferred'] ?? 0) + $inferredOrders;
                 $out[$id]['orders'] = (int) $out[$id]['orders'] + $inferredOrders;
                 $out[$id]['lines'] = (int) $out[$id]['lines'] + (int) ($row['lines'] ?? 0);
                 $out[$id]['packages'] = (float) $out[$id]['packages'] + (float) ($row['packages'] ?? 0);
@@ -402,21 +407,7 @@ final class SpecialOfferAnalyticsService
                  WHERE so.id IN (' . $in . ')
                    AND oi.special_offer_id IS NULL
                    AND o.status NOT IN (\'cancelled\', \'rejected\')
-                   AND o.visitor_session_id IS NOT NULL
-                   AND btrim(o.visitor_session_id) <> \'\'
-                   AND EXISTS (
-                     SELECT 1
-                     FROM visitor_logs vl
-                     WHERE vl.session_id = o.visitor_session_id
-                       AND vl.created_at <= o.created_at + interval \'5 minutes\'
-                       AND vl.created_at >= o.created_at - interval \'30 days\'
-                       AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\', \'order_placed\')
-                       AND (
-                         (vl.details_ar LIKE \'{%\' AND vl.details_ar::jsonb->>\'offer_slug\' = so.slug)
-                         OR vl.details_ar ILIKE \'%"offer_slug":"\' || so.slug || \'"%\'
-                         OR vl.referer ILIKE \'%offer=\' || so.slug || \'%\'
-                       )
-                   )
+                   AND ' . self::orderOfferEvidenceSql('o', 'so') . '
                    AND NOT EXISTS (
                      SELECT 1
                      FROM order_items oi2
@@ -463,6 +454,34 @@ final class SpecialOfferAnalyticsService
         }
     }
 
+    /** SQL: order_placed log for this order names the offer slug. */
+    private static function orderPlacedOfferLogSql(string $orderAlias, string $offerAlias): string
+    {
+        return 'EXISTS (
+            SELECT 1
+            FROM visitor_logs vop
+            WHERE vop.action = \'order_placed\'
+              AND vop.created_at <= ' . $orderAlias . '.created_at + interval \'6 hours\'
+              AND vop.created_at >= ' . $orderAlias . '.created_at - interval \'1 hour\'
+              AND (
+                (vop.details_ar LIKE \'{%\' AND (
+                  vop.details_ar::jsonb->>\'order_id\' = ' . $orderAlias . '.id::text
+                  OR vop.details_ar::jsonb->>\'order_number\' = ' . $orderAlias . '.order_number
+                ))
+                OR vop.details_ar ILIKE \'%\' || ' . $orderAlias . '.order_number || \'%\'
+              )
+              AND (
+                (vop.details_ar LIKE \'{%\' AND vop.details_ar::jsonb->>\'offer_slug\' = ' . $offerAlias . '.slug)
+                OR vop.details_ar ILIKE \'%"offer_slug":"\' || ' . $offerAlias . '.slug || \'"%\'
+              )
+        )';
+    }
+
+    private static function orderOfferEvidenceSql(string $orderAlias, string $offerAlias): string
+    {
+        return '(' . self::orderOfferSessionSql($orderAlias, $offerAlias) . ' OR ' . self::orderPlacedOfferLogSql($orderAlias, $offerAlias) . ')';
+    }
+
     /** SQL: order visited this offer (visitor_logs.session_id = orders.visitor_session_id). */
     private static function orderOfferSessionSql(string $orderAlias, string $offerAlias): string
     {
@@ -501,15 +520,94 @@ final class SpecialOfferAnalyticsService
 
     private static bool $backfillRan = false;
 
-    private static function backfillRecentOrderAttribution(int $days): void
+    /**
+     * @return array{sessions_filled: int, sql_linked: int, php_linked: int, batches: int}
+     */
+    public static function runFullOrderOfferBackfill(int $days = 365, int $maxBatches = 40): array
+    {
+        $days = max(1, min(3650, $days));
+        $maxBatches = max(1, min(200, $maxBatches));
+        self::$backfillRan = false;
+        $sessionsFilled = VisitorLogService::backfillOrdersVisitorSessionFromLogs($days);
+        $sqlLinked = self::bulkPersistOfferLinksFromLogs($days);
+        $phpLinked = 0;
+        $batches = 0;
+        for ($i = 0; $i < $maxBatches; $i++) {
+            self::$backfillRan = false;
+            self::backfillRecentOrderAttribution($days, 2500);
+            $batches++;
+            $delta = self::$lastBackfillLinked;
+            $phpLinked += $delta;
+            if ($delta === 0) {
+                break;
+            }
+        }
+
+        return [
+            'sessions_filled' => $sessionsFilled,
+            'sql_linked' => $sqlLinked,
+            'php_linked' => $phpLinked,
+            'batches' => $batches,
+        ];
+    }
+
+    private static int $lastBackfillLinked = 0;
+
+  /** Bulk UPDATE order_items from order_placed logs + explicit offer products. */
+    public static function bulkPersistOfferLinksFromLogs(int $days = 365): int
+    {
+        $days = max(1, min(3650, $days));
+        try {
+            $stmt = Database::pdo()->prepare(
+                'UPDATE order_items oi
+                 SET special_offer_id = so.id,
+                     original_sale_price_sp = COALESCE(oi.original_sale_price_sp, oi.sale_price_sp),
+                     original_sale_price_usd = COALESCE(oi.original_sale_price_usd, oi.sale_price_usd)
+                 FROM orders o
+                 INNER JOIN special_offers so ON o.created_at >= so.starts_at
+                    AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
+                 INNER JOIN visitor_logs vop ON vop.action = \'order_placed\'
+                    AND vop.created_at <= o.created_at + interval \'6 hours\'
+                    AND vop.created_at >= o.created_at - interval \'1 hour\'
+                    AND (
+                      (vop.details_ar LIKE \'{%\' AND (
+                        vop.details_ar::jsonb->>\'order_id\' = o.id::text
+                        OR vop.details_ar::jsonb->>\'order_number\' = o.order_number
+                      ))
+                      OR vop.details_ar ILIKE \'%\' || o.order_number || \'%\'
+                    )
+                    AND (
+                      (vop.details_ar LIKE \'{%\' AND vop.details_ar::jsonb->>\'offer_slug\' = so.slug)
+                      OR vop.details_ar ILIKE \'%"offer_slug":"\' || so.slug || \'"%\'
+                    )
+                 WHERE oi.order_id = o.id
+                   AND oi.special_offer_id IS NULL
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')
+                   AND o.created_at >= NOW() - make_interval(days => :days)
+                   AND EXISTS (
+                     SELECT 1 FROM special_offer_products sop
+                     WHERE sop.offer_id = so.id
+                       AND lower(trim(sop.material_guid::text)) = lower(trim(oi.material_guid::text))
+                   )'
+            );
+            $stmt->execute(['days' => $days]);
+
+            return $stmt->rowCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    private static function backfillRecentOrderAttribution(int $days, int $batch = 2500): void
     {
         if (self::$backfillRan) {
             return;
         }
         self::$backfillRan = true;
+        self::$lastBackfillLinked = 0;
 
-        $days = max(1, min(365, $days));
-        $batch = 800;
+        $days = max(1, min(3650, $days));
+        $batch = max(100, min(5000, $batch));
 
         try {
             $pdo = Database::pdo();
@@ -599,6 +697,7 @@ final class SpecialOfferAnalyticsService
                     'orig_sp' => $origSp,
                     'orig_usd' => $origUsd,
                 ]);
+                self::$lastBackfillLinked += $update->rowCount();
             }
         } catch (\Throwable) {
             // optional columns / missing tables on older installs
@@ -709,7 +808,7 @@ final class SpecialOfferAnalyticsService
     public static function repairOrderForOfferSlug(string $orderNumber, string $offerSlug, bool $apply = true): array
     {
         $diagnose = self::diagnoseOrderForOffer($orderNumber, $offerSlug);
-        if ($diagnose['order'] ?? null === null || $diagnose['offer'] ?? null === null) {
+        if (($diagnose['order'] ?? null) === null || ($diagnose['offer'] ?? null) === null) {
             return [
                 'ok' => false,
                 'message' => implode('; ', $diagnose['issues'] ?? ['not found']),

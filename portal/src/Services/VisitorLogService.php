@@ -2871,6 +2871,46 @@ final class VisitorLogService
         ) === false;
     }
 
+    /** Fill orders.visitor_session_id from order_placed visitor logs (bulk). */
+    public static function backfillOrdersVisitorSessionFromLogs(int $days = 365): int
+    {
+        if (!self::ordersHaveVisitorSessionColumn()) {
+            return 0;
+        }
+        $days = max(1, min(3650, $days));
+        try {
+            $stmt = Database::pdo()->prepare(
+                'UPDATE orders o
+                 SET visitor_session_id = src.session_id
+                 FROM (
+                    SELECT DISTINCT ON (o2.id)
+                           o2.id AS order_id,
+                           vl.session_id
+                    FROM orders o2
+                    INNER JOIN visitor_logs vl ON vl.action = \'order_placed\'
+                       AND btrim(vl.session_id) <> \'\'
+                       AND (
+                         (vl.details_ar LIKE \'{%\' AND (
+                           vl.details_ar::jsonb->>\'order_id\' = o2.id::text
+                           OR vl.details_ar::jsonb->>\'order_number\' = o2.order_number
+                         ))
+                         OR vl.details_ar ILIKE \'%\' || o2.order_number || \'%\'
+                       )
+                    WHERE o2.created_at >= NOW() - make_interval(days => :days)
+                      AND (o2.visitor_session_id IS NULL OR btrim(o2.visitor_session_id) = \'\')
+                    ORDER BY o2.id, vl.created_at DESC
+                 ) src
+                 WHERE o.id = src.order_id
+                   AND (o.visitor_session_id IS NULL OR btrim(o.visitor_session_id) = \'\')'
+            );
+            $stmt->execute(['days' => $days]);
+
+            return $stmt->rowCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
     /** Visitor session id captured when the order was placed (if orders row missed it). */
     public static function sessionIdForOrder(string $orderId, string $orderNumber): ?string
     {
@@ -2976,7 +3016,7 @@ final class VisitorLogService
                 'SELECT details_ar
                  FROM visitor_logs
                  WHERE session_id = :session_id
-                   AND action IN (\'add_to_cart\', \'page_view\', \'product_view\')
+                   AND action IN (\'add_to_cart\', \'page_view\', \'product_view\', \'order_placed\')
                    ' . $beforeSql . '
                  ORDER BY created_at DESC
                  LIMIT 60'

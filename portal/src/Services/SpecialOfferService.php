@@ -1012,14 +1012,8 @@ final class SpecialOfferService
 
         foreach ($offers as $offer) {
             if ($material === null) {
-                try {
-                    $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
-                    if ($response['ok'] && is_array($response['data'])) {
-                        $material = $response['data'];
-                    } else {
-                        $material = ['materialGuid' => $materialGuid];
-                    }
-                } catch (\Throwable) {
+                $material = StoreCatalogService::findMaterial($materialGuid);
+                if ($material === null) {
                     $material = ['materialGuid' => $materialGuid];
                 }
             }

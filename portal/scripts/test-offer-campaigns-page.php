@@ -55,7 +55,10 @@ $assert('visitor log offer slug uses session_id column', str_contains($visitorLo
 $offerSvc = (string) file_get_contents($root . '/src/Services/SpecialOfferService.php');
 $assert('scheduled offer notifications deferred', str_contains($offerSvc, 'publishDueScheduledOfferNotifications'));
 $assert('order repair script exists', is_file($root . '/scripts/repair-offer-order.php'));
+$assert('bulk backfill script exists', is_file($root . '/scripts/backfill-offer-attribution.php'));
 $assert('session lookup for order_placed logs', str_contains($visitorLog, 'sessionIdForOrder'));
+$assert('bulk session backfill from order_placed', str_contains($visitorLog, 'backfillOrdersVisitorSessionFromLogs'));
+$assert('order_placed offer evidence sql', str_contains($analyticsSrc, 'orderPlacedOfferLogSql'));
 $shareCart = (string) file_get_contents($root . '/src/Services/ShareCartService.php');
 $assert('cart lines attribute offer from session slug', str_contains($shareCart, 'attributeOfferOnLine'));
 $assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
