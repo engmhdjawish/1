@@ -817,6 +817,87 @@ final class ShareCartService
         return $enriched;
     }
 
+    /**
+     * Force-offer attribution for order save: store slug, line slug, then visitor session logs.
+     *
+     * @param array<string, mixed> $line
+     */
+    public static function attributeOfferOnLine(
+        array $line,
+        ?string $storeOfferSlug = null,
+        ?string $visitorSessionId = null,
+        ?string $beforeAt = null
+    ): array {
+        $line = self::enrichLineWithOffer($line);
+        if (trim((string) ($line['special_offer_id'] ?? '')) !== '') {
+            return $line;
+        }
+
+        $slug = trim((string) ($line['added_store_offer'] ?? $line['offer_slug'] ?? ''));
+        if ($slug === '' && $storeOfferSlug !== null) {
+            $slug = trim($storeOfferSlug);
+        }
+        if ($slug === '' && $visitorSessionId !== null && trim($visitorSessionId) !== '') {
+            $slug = VisitorLogService::dominantOfferSlugForSession($visitorSessionId, $beforeAt) ?? '';
+        }
+        if ($slug === '') {
+            return $line;
+        }
+
+        $offer = SpecialOfferService::activeOfferBySlug($slug);
+        if ($offer === null && $beforeAt !== null && trim($beforeAt) !== '') {
+            foreach (SpecialOfferService::offersForOrderInstant($beforeAt) as $candidate) {
+                if (strcasecmp(trim((string) ($candidate['slug'] ?? '')), $slug) === 0) {
+                    $offer = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($offer === null) {
+            return $line;
+        }
+
+        $guid = trim((string) ($line['material_guid'] ?? ''));
+        if ($guid === '') {
+            return $line;
+        }
+
+        $product = StoreCatalogService::findMaterial($guid);
+        if ($product === null) {
+            return $line;
+        }
+        if (!SpecialOfferService::offerIncludesMaterial($offer, $guid, $product)) {
+            return $line;
+        }
+
+        $apiLine = self::lineFromApiItem($product, true);
+        $packaging = max(1.0, (float) ($apiLine['packaging'] ?? 1));
+        $origSp = (float) ($line['original_sale_price_sp'] ?? 0);
+        $origUsd = (float) ($line['original_sale_price_usd'] ?? 0);
+        if ($origSp > 0) {
+            $apiLine['original_unit_sale_price_sp'] = $origSp / $packaging;
+            $apiLine['unit_sale_price_sp'] = $apiLine['original_unit_sale_price_sp'];
+        }
+        if ($origUsd > 0) {
+            $apiLine['original_unit_sale_price_usd'] = $origUsd / $packaging;
+            $apiLine['unit_sale_price_usd'] = $apiLine['original_unit_sale_price_usd'];
+        }
+
+        $enriched = SpecialOfferService::applyToCartLine(self::normalizeLine($apiLine), $offer);
+        $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
+        $enriched['added_store_offer'] = $slug;
+        if (trim((string) ($line['material_name_ar'] ?? '')) !== '') {
+            $enriched['material_name_ar'] = (string) $line['material_name_ar'];
+        }
+        foreach (['customer_show_price', 'added_store_section', 'price_snapshot_sp', 'price_snapshot_usd', 'price_change', 'image_url'] as $key) {
+            if (array_key_exists($key, $line)) {
+                $enriched[$key] = $line[$key];
+            }
+        }
+
+        return $enriched;
+    }
+
     /** @param array<string, mixed> $apiItem */
     public static function lineFromApiItem(array $apiItem, bool $capturePrices): array
     {

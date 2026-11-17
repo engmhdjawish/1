@@ -71,8 +71,18 @@ final class StoreCartRequest
 
         $reconcile = ShareCartService::reconcileStock(StoreCartService::TOKEN);
         StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        $storeOfferSlug = isset($_SESSION['store_cart_context']['offer'])
+            ? trim((string) $_SESSION['store_cart_context']['offer'])
+            : '';
+        $visitorSessionId = self::visitorSessionIdFromInput($input);
+        $attrAt = date('Y-m-d H:i:s');
         $cartItems = array_values(array_map(
-            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            static fn (array $line): array => ShareCartService::attributeOfferOnLine(
+                $line,
+                $storeOfferSlug !== '' ? $storeOfferSlug : null,
+                $visitorSessionId,
+                $attrAt
+            ),
             StoreCartService::items()
         ));
         if ($cartItems === []) {
@@ -95,7 +105,8 @@ final class StoreCartRequest
             $notes !== '' ? $notes : null,
             $cartItems,
             $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null,
-            self::visitorSessionIdFromInput($input)
+            $visitorSessionId,
+            $storeOfferSlug !== '' ? $storeOfferSlug : null
         );
 
         if (!$result['ok']) {

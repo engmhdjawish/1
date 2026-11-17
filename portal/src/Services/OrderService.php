@@ -95,7 +95,8 @@ final class OrderService
         ?string $notesAr,
         array $items,
         ?string $webCustomerId = null,
-        ?string $visitorSessionId = null
+        ?string $visitorSessionId = null,
+        ?string $storeOfferSlug = null
     ): array {
         $shareLinkId = trim($shareLinkId);
         $guestNameAr = trim($guestNameAr);
@@ -106,10 +107,25 @@ final class OrderService
             return ['ok' => false, 'message' => 'بيانات الطلب غير مكتملة.'];
         }
 
-        $items = array_values(array_map(
-            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
-            $items
-        ));
+        $storeOfferSlug = trim((string) ($storeOfferSlug ?? ''));
+        if ($storeOfferSlug === '' && isset($_SESSION['store_cart_context']['offer'])) {
+            $storeOfferSlug = trim((string) $_SESSION['store_cart_context']['offer']);
+        }
+        $visitorSessionId = trim((string) ($visitorSessionId ?? ''));
+        if (strlen($visitorSessionId) > 120) {
+            $visitorSessionId = substr($visitorSessionId, 0, 120);
+        }
+        $attrAt = date('Y-m-d H:i:s');
+        $attributeLine = static function (array $line) use ($storeOfferSlug, $visitorSessionId, $attrAt): array {
+            return ShareCartService::attributeOfferOnLine(
+                $line,
+                $storeOfferSlug !== '' ? $storeOfferSlug : null,
+                $visitorSessionId !== '' ? $visitorSessionId : null,
+                $attrAt
+            );
+        };
+
+        $items = array_values(array_map($attributeLine, $items));
 
         $shareLinkId = trim($shareLinkId);
 
@@ -172,10 +188,6 @@ final class OrderService
         $pdo = Database::pdo();
         $orderNumber = self::generateOrderNumber();
         $quoteToken = bin2hex(random_bytes(32));
-        $visitorSessionId = trim((string) ($visitorSessionId ?? ''));
-        if (strlen($visitorSessionId) > 120) {
-            $visitorSessionId = substr($visitorSessionId, 0, 120);
-        }
         $storeVisitorSession = $visitorSessionId !== '' && VisitorLogService::ordersHaveVisitorSessionColumn();
 
         try {
@@ -211,10 +223,7 @@ final class OrderService
             $totalSp = 0.0;
             $totalUsd = 0.0;
             $sortOrder = 0;
-            $recheckAvailable = array_values(array_map(
-                static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
-                $recheck['available']
-            ));
+            $recheckAvailable = array_values(array_map($attributeLine, $recheck['available']));
             foreach ($recheckAvailable as $item) {
                 $materialGuid = trim((string) ($item['material_guid'] ?? ''));
                 $name = trim((string) ($item['material_name_ar'] ?? ''));

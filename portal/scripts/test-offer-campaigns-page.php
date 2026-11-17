@@ -49,6 +49,9 @@ $orderSrc = (string) file_get_contents($root . '/src/Services/OrderService.php')
 $assert('orders enrich cart lines before save', str_contains($orderSrc, 'enrichLineWithOffer'));
 $assert('orders re-enrich after stock recheck', str_contains($orderSrc, 'recheckAvailable'));
 $assert('analytics backfills missing offer ids', str_contains($analyticsSrc, 'backfillRecentOrderAttribution'));
+$assert('analytics infers sales from visitor session', str_contains($analyticsSrc, 'mergeSessionInferredSummaries'));
+$shareCart = (string) file_get_contents($root . '/src/Services/ShareCartService.php');
+$assert('cart lines attribute offer from session slug', str_contains($shareCart, 'attributeOfferOnLine'));
 $assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
 $stagnantSrc = (string) file_get_contents($root . '/src/Services/StagnantInventoryService.php');
 $assert('stagnant merges last sale stats', str_contains($stagnantSrc, 'attachLastSaleStats'));

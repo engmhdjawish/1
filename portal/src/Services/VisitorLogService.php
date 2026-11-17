@@ -2863,4 +2863,74 @@ final class VisitorLogService
             FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
         ) === false;
     }
+
+    /** Dominant offer slug from this session before a given time (add-to-cart / offer page views). */
+    public static function dominantOfferSlugForSession(string $sessionId, ?string $beforeAt = null): ?string
+    {
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            return null;
+        }
+
+        $params = ['session_id' => $sessionId];
+        $beforeSql = '';
+        if ($beforeAt !== null && trim($beforeAt) !== '') {
+            $beforeSql = ' AND created_at <= :before_at';
+            $params['before_at'] = trim($beforeAt);
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT details_ar
+                 FROM visitor_logs
+                 WHERE visitor_session_id = :session_id
+                   AND action IN (\'add_to_cart\', \'page_view\', \'product_view\')
+                   ' . $beforeSql . '
+                 ORDER BY created_at DESC
+                 LIMIT 60'
+            );
+            $stmt->execute($params);
+            $counts = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $slug = self::offerSlugFromLogDetails((string) ($row['details_ar'] ?? ''));
+                if ($slug === '') {
+                    continue;
+                }
+                $counts[$slug] = ($counts[$slug] ?? 0) + 1;
+            }
+            if ($counts === []) {
+                return null;
+            }
+            arsort($counts);
+
+            return (string) array_key_first($counts);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function offerSlugFromLogDetails(string $details): string
+    {
+        $details = trim($details);
+        if ($details === '') {
+            return '';
+        }
+        if (str_starts_with($details, '{')) {
+            try {
+                $json = json_decode($details, true, 512, JSON_THROW_ON_ERROR);
+                if (is_array($json)) {
+                    $slug = trim((string) ($json['offer_slug'] ?? ''));
+                    if ($slug !== '') {
+                        return $slug;
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+        if (preg_match('/"offer_slug"\s*:\s*"([^"\\\\]+)"/u', $details, $m)) {
+            return trim((string) ($m[1] ?? ''));
+        }
+
+        return '';
+    }
 }

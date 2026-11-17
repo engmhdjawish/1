@@ -61,7 +61,10 @@ $panelNote = trim((string) ($analyticsPanelNote ?? 'آخر 90 يوماً للم�
       <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 col-span-2 md:col-span-4">
         <p class="text-xs text-amber-900">
           <span class="font-bold"><?= h($fmtInt($analyticsSummary['orders_linked'] ?? 0)) ?></span> طلباً مرتبطاً مباشرة بالعرض، و
-          <span class="font-bold"><?= h($fmtInt($analyticsSummary['orders_inferred'] ?? 0)) ?></span> طلباً قُدّر من سعر مخفّض + مادة ضمن العرض (طلبات قديمة بلا ربط تلقائي).
+          <span class="font-bold"><?= h($fmtInt($analyticsSummary['orders_inferred'] ?? 0)) ?></span> طلباً مُقدَّراً (خصم/مادة أو نفس جلسة زيارة العرض).
+          <?php if ((int) ($analyticsSummary['orders_session_inferred'] ?? 0) > 0): ?>
+            <span class="block mt-1">منها <span class="font-bold"><?= h($fmtInt($analyticsSummary['orders_session_inferred'] ?? 0)) ?></span> عبر جلسة الزائر (سلة/صفحة العرض).</span>
+          <?php endif; ?>
         </p>
       </div>
     <?php endif; ?>

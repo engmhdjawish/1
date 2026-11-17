@@ -68,6 +68,7 @@ final class SpecialOfferAnalyticsService
         }
 
         self::mergeInferredSummaries($out, $offerIds, $params, $in);
+        self::mergeSessionInferredSummaries($out, $offerIds, $params, $in);
 
         if (!$includeEngagement) {
             return $out;
@@ -249,6 +250,7 @@ final class SpecialOfferAnalyticsService
             'orders' => 0,
             'orders_linked' => 0,
             'orders_inferred' => 0,
+            'orders_session_inferred' => 0,
             'lines' => 0,
             'packages' => 0.0,
             'revenue_syp' => 0.0,
@@ -362,6 +364,87 @@ final class SpecialOfferAnalyticsService
         }
     }
 
+    /**
+     * @param array<string, array<string, int|float>> $out
+     * @param list<string> $offerIds
+     * @param array<string, string> $params
+     */
+    private static function mergeSessionInferredSummaries(array &$out, array $offerIds, array $params, string $in): void
+    {
+        if ($offerIds === [] || !VisitorLogService::ordersHaveVisitorSessionColumn()) {
+            return;
+        }
+
+        try {
+            $inferred = Database::pdo()->prepare(
+                'SELECT so.id::text AS offer_id,
+                        COUNT(DISTINCT oi.order_id)::int AS orders,
+                        COUNT(*)::int AS lines,
+                        COALESCE(SUM(oi.quantity), 0)::float AS packages,
+                        COALESCE(SUM(oi.sale_price_sp * oi.quantity), 0)::float AS revenue_syp,
+                        COALESCE(SUM(oi.sale_price_usd * oi.quantity), 0)::float AS revenue_usd,
+                        COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_sp, oi.sale_price_sp) - oi.sale_price_sp, 0) * oi.quantity), 0)::float AS discount_syp,
+                        COALESCE(SUM(GREATEST(COALESCE(oi.original_sale_price_usd, oi.sale_price_usd) - oi.sale_price_usd, 0) * oi.quantity), 0)::float AS discount_usd,
+                        COUNT(DISTINCT oi.material_guid)::int AS materials
+                 FROM special_offers so
+                 INNER JOIN orders o
+                    ON o.created_at >= so.starts_at
+                   AND (so.ends_at IS NULL OR o.created_at < so.ends_at)
+                 INNER JOIN order_items oi ON oi.order_id = o.id
+                 WHERE so.id IN (' . $in . ')
+                   AND oi.special_offer_id IS NULL
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')
+                   AND o.visitor_session_id IS NOT NULL
+                   AND btrim(o.visitor_session_id) <> \'\'
+                   AND EXISTS (
+                     SELECT 1
+                     FROM visitor_logs vl
+                     WHERE vl.visitor_session_id = o.visitor_session_id
+                       AND vl.created_at <= o.created_at + interval \'5 minutes\'
+                       AND vl.created_at >= o.created_at - interval \'30 days\'
+                       AND vl.action IN (\'add_to_cart\', \'page_view\', \'product_view\')
+                       AND (
+                         (vl.details_ar LIKE \'{%\' AND vl.details_ar::jsonb->>\'offer_slug\' = so.slug)
+                         OR vl.details_ar ILIKE \'%"offer_slug":"\' || so.slug || \'"%\'
+                       )
+                   )
+                   AND (
+                     so.selection_mode::text = \'filter\'
+                     OR EXISTS (
+                       SELECT 1 FROM special_offer_products sop
+                       WHERE sop.offer_id = so.id
+                         AND lower(trim(sop.material_guid::text)) = lower(trim(oi.material_guid::text))
+                     )
+                     OR ' . self::discountedLineSql('oi') . '
+                   )
+                 GROUP BY so.id'
+            );
+            $inferred->execute($params);
+            foreach ($inferred->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $id = (string) ($row['offer_id'] ?? '');
+                if ($id === '' || !isset($out[$id])) {
+                    continue;
+                }
+                $inferredOrders = (int) ($row['orders'] ?? 0);
+                if ($inferredOrders === 0) {
+                    continue;
+                }
+                $out[$id]['orders_session_inferred'] = $inferredOrders;
+                $out[$id]['orders_inferred'] = (int) ($out[$id]['orders_inferred'] ?? 0) + $inferredOrders;
+                $out[$id]['orders'] = (int) $out[$id]['orders'] + $inferredOrders;
+                $out[$id]['lines'] = (int) $out[$id]['lines'] + (int) ($row['lines'] ?? 0);
+                $out[$id]['packages'] = (float) $out[$id]['packages'] + (float) ($row['packages'] ?? 0);
+                $out[$id]['revenue_syp'] = (float) $out[$id]['revenue_syp'] + (float) ($row['revenue_syp'] ?? 0);
+                $out[$id]['revenue_usd'] = (float) $out[$id]['revenue_usd'] + (float) ($row['revenue_usd'] ?? 0);
+                $out[$id]['discount_syp'] = (float) $out[$id]['discount_syp'] + (float) ($row['discount_syp'] ?? 0);
+                $out[$id]['discount_usd'] = (float) $out[$id]['discount_usd'] + (float) ($row['discount_usd'] ?? 0);
+                $out[$id]['materials'] = max((int) $out[$id]['materials'], (int) ($row['materials'] ?? 0));
+            }
+        } catch (\Throwable) {
+            // visitor_logs / visitor_session_id may be absent
+        }
+    }
+
     private static function discountedLineSql(string $alias): string
     {
         $eps = self::PRICE_EPSILON;
@@ -385,17 +468,21 @@ final class SpecialOfferAnalyticsService
         self::$backfillRan = true;
 
         $days = max(1, min(365, $days));
-        $batch = 300;
+        $batch = 800;
 
         try {
             $pdo = Database::pdo();
+            $sessionCol = VisitorLogService::ordersHaveVisitorSessionColumn()
+                ? 'o.visitor_session_id'
+                : 'NULL::text';
             $stmt = $pdo->prepare(
                 'SELECT oi.id::text AS item_id,
                         oi.material_guid::text AS material_guid,
                         oi.sale_price_sp, oi.sale_price_usd,
                         oi.original_sale_price_sp, oi.original_sale_price_usd,
                         oi.special_offer_id::text AS special_offer_id,
-                        o.created_at::text AS ordered_at
+                        o.created_at::text AS ordered_at,
+                        ' . $sessionCol . ' AS visitor_session_id
                  FROM order_items oi
                  INNER JOIN orders o ON o.id = oi.order_id
                  WHERE oi.special_offer_id IS NULL
@@ -432,10 +519,16 @@ final class SpecialOfferAnalyticsService
                     'original_sale_price_sp' => isset($row['original_sale_price_sp']) ? (float) $row['original_sale_price_sp'] : null,
                     'original_sale_price_usd' => isset($row['original_sale_price_usd']) ? (float) $row['original_sale_price_usd'] : null,
                 ];
-                $enriched = ShareCartService::enrichLineWithOffer(array_merge($line, [
-                    'material_guid' => $guid,
-                    'quantity' => 1.0,
-                ]));
+                $sessionId = trim((string) ($row['visitor_session_id'] ?? ''));
+                $enriched = ShareCartService::attributeOfferOnLine(
+                    array_merge($line, [
+                        'material_guid' => $guid,
+                        'quantity' => 1.0,
+                    ]),
+                    null,
+                    $sessionId !== '' ? $sessionId : null,
+                    $orderedAt
+                );
                 $offerId = trim((string) ($enriched['special_offer_id'] ?? ''));
                 if ($offerId === '') {
                     $offerId = SpecialOfferService::resolveOfferIdForOrderLine($guid, $line, $orderedAt) ?? '';
