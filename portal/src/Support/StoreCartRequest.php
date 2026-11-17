@@ -71,7 +71,10 @@ final class StoreCartRequest
 
         $reconcile = ShareCartService::reconcileStock(StoreCartService::TOKEN);
         StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
-        $cartItems = array_values(StoreCartService::items());
+        $cartItems = array_values(array_map(
+            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            StoreCartService::items()
+        ));
         if ($cartItems === []) {
             $replay = self::recentSubmitReplay();
             if ($replay !== null) {

@@ -106,6 +106,11 @@ final class OrderService
             return ['ok' => false, 'message' => 'بيانات الطلب غير مكتملة.'];
         }
 
+        $items = array_values(array_map(
+            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            $items
+        ));
+
         $shareLinkId = trim($shareLinkId);
 
         $duplicate = self::findRecentDuplicateOrder(Database::pdo(), $guestPhone, $shareLinkId, $items);

@@ -92,6 +92,7 @@ $buildQuery = static function (array $params = []) use ($offerTab, $includeEngag
   <?php
     $analyticsSummary = is_array($focusAnalytics['summary'] ?? null) ? $focusAnalytics['summary'] : [];
     $analyticsMaterials = is_array($focusAnalytics['materials'] ?? null) ? $focusAnalytics['materials'] : [];
+    $analyticsRecentOrders = is_array($focusAnalytics['recent_orders'] ?? null) ? $focusAnalytics['recent_orders'] : [];
     $analyticsPanelTitle = 'تفاصيل: ' . (string) ($focusOffer['title_ar'] ?? '');
     $analyticsPanelNote = 'شريحة ' . ($offerStatusLabels[(string) ($focusOffer['_lifecycle'] ?? '')] ?? '') . ' · يمكنك العودة للجدول لمقارنة بقية الحملات';
   ?>
@@ -164,7 +165,12 @@ $buildQuery = static function (array $params = []) use ($offerTab, $includeEngag
                   <p class="text-xs text-text-muted whitespace-nowrap"><?= h(substr((string) ($row['starts_at'] ?? ''), 0, 10)) ?> — <?= !empty($row['ends_at']) ? h(substr((string) $row['ends_at'], 0, 10)) : '∞' ?></p>
                 <?php endif; ?>
               </td>
-              <td class="px-4 py-3 tabular-nums font-bold"><?= h($fmtInt($metrics['orders'] ?? 0)) ?></td>
+              <td class="px-4 py-3 tabular-nums font-bold">
+                <?= h($fmtInt($metrics['orders'] ?? 0)) ?>
+                <?php if ((int) ($metrics['orders_inferred'] ?? 0) > 0): ?>
+                  <span class="block text-[10px] font-normal text-amber-800">+<?= (int) $metrics['orders_inferred'] ?> تقدير</span>
+                <?php endif; ?>
+              </td>
               <td class="px-4 py-3 tabular-nums"><?= h($fmtMoneyAr($metrics['packages'] ?? 0, 1)) ?></td>
               <td class="px-4 py-3 tabular-nums"><?= h($fmtMoneyAr($metrics['revenue_syp'] ?? 0, 0)) ?></td>
               <td class="px-4 py-3 tabular-nums text-amber-800"><?= h($fmtMoneyAr($metrics['discount_syp'] ?? 0, 0)) ?></td>
@@ -181,7 +187,7 @@ $buildQuery = static function (array $params = []) use ($offerTab, $includeEngag
       </table>
     </div>
     <p class="px-4 py-3 text-[11px] text-text-muted border-t border-border-subtle">
-      المبيعات مجمّعة من الطلبات غير الملغاة. التفاعل اختياري وبطيء على قواعد كبيرة — حمّله عند الحاجة فقط.
+      المبيعات من الطلبات غير الملغاة؛ الطلبات الجديدة تُربط تلقائياً بالعرض عند الإرسال. الطلبات القديمة بلا ربط تُحسب تقديرياً عند وجود خصم ومادة ضمن العرض. التفاعل اختياري — حمّله عند الحاجة.
     </p>
   <?php endif; ?>
 </section>

@@ -89,8 +89,14 @@ $cartMode = $inCart
   <?php if (!empty($storeSectionSlug ?? '')): ?>
     <input type="hidden" name="store_section" value="<?= h((string) $storeSectionSlug) ?>">
   <?php endif; ?>
-  <?php if (!empty($storeOfferSlug ?? '')): ?>
-    <input type="hidden" name="store_offer" value="<?= h((string) $storeOfferSlug) ?>">
+  <?php
+    $cartOfferSlug = trim((string) ($storeOfferSlug ?? ''));
+    if ($cartOfferSlug === '') {
+        $cartOfferSlug = trim((string) ($item['offer_slug'] ?? ''));
+    }
+  ?>
+  <?php if ($cartOfferSlug !== ''): ?>
+    <input type="hidden" name="store_offer" value="<?= h($cartOfferSlug) ?>">
   <?php endif; ?>
   <?php if ($returnUrl !== ''): ?>
     <input type="hidden" name="return" value="<?= h($returnUrl) ?>">

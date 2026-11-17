@@ -1242,11 +1242,13 @@
       const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
       flyToCart(flySource);
       if (window.SiteAnalytics) {
+        const offerSlug = String(payload.store_offer || payload.offer_slug || '').trim();
         window.SiteAnalytics.track('add_to_cart', {
           product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
           product_code: String(payload.material_code || ''),
           product_name: String(payload.material_name_ar || ''),
           quantity: String(payload.quantity || '1'),
+          ...(offerSlug !== '' ? { offer_slug: offerSlug } : {}),
           label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
         });
       }
