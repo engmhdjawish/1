@@ -283,7 +283,14 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       </div>
     </aside>
     <main class="flex-1 lg:mr-64 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 w-full max-w-[1600px] dashboard-main-content" data-dashboard-main data-current-route="<?= h($currentRoute) ?>"<?php if (!empty($dashboardPageAssets ?? '')): ?> data-dashboard-page-assets="<?= h((string) $dashboardPageAssets) ?>"<?php endif; ?>>
-      <?php if ($navArea === DashboardNavigation::AREA_SITE_CONTENT && $currentRoute !== '/dashboard/site-content.php'): ?>
+      <?php if ($navArea === DashboardNavigation::AREA_MERCHANDISING && $currentRoute !== '/dashboard/merchandising.php'): ?>
+        <nav class="mb-4">
+          <a href="/dashboard/merchandising.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
+            <span class="material-symbols-outlined text-base">chevron_right</span>
+            العودة إلى العروض والمخزون
+          </a>
+        </nav>
+      <?php elseif ($navArea === DashboardNavigation::AREA_SITE_CONTENT && $currentRoute !== '/dashboard/site-content.php'): ?>
         <nav class="mb-4">
           <a href="/dashboard/site-content.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
             <span class="material-symbols-outlined text-base">chevron_right</span>

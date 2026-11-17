@@ -9,8 +9,10 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold text-slate-900">محتوى الموقع</h1>
       <p class="text-sm text-text-muted mt-1 max-w-2xl">
-        إدارة ما يراه زوار الموقع: الصفحة الرئيسية، العروض، الوسائط، وصفحة من نحن.
-        لإعدادات المستخدمين والربط التقني انتقل إلى
+        إدارة ما يراه زوار الموقع: تخطيط الصفحة الرئيسية، الوسائط، وصفحة من نحن.
+        للعروض والمخزون انتقل إلى
+        <a href="/dashboard/merchandising.php" class="text-primary font-bold hover:underline">العروض والمخزون</a>،
+        ولإعدادات المستخدمين والربط التقني إلى
         <a href="/dashboard/configuration.php" class="text-primary font-bold hover:underline">إدارة النظام</a>.
       </p>
     </div>
