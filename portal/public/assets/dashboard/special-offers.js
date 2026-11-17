@@ -118,6 +118,81 @@
       return 0;
     };
 
+    const zoomImageUrl = (url) => {
+      const text = String(url || '').trim();
+      if (!text) return '';
+      if (text.includes('thumb=1')) return text.replace('thumb=1', 'thumb=0');
+      if (!text.includes('thumb=')) {
+        return text.includes('?') ? `${text}&thumb=0` : `${text}?thumb=0`;
+      }
+      return text;
+    };
+
+    const attachOfferPreviewLine = (tr, guid, meta = {}) => {
+      if (!(tr instanceof HTMLElement)) return;
+      const name = meta.name || meta.label || guid;
+      const code = meta.code || '';
+      const image = String(meta.image || '').trim();
+      const zoomUrl = zoomImageUrl(image) || image;
+      tr.setAttribute('data-so-offer-preview-line', '');
+      tr.setAttribute('data-preview-guid', guid);
+      tr.setAttribute(
+        'data-preview',
+        JSON.stringify({
+          guid,
+          name,
+          code,
+          thumbUrl: image,
+          zoomUrl,
+          previewContext: 'offer',
+          hasOffer: true,
+          showPrice: true,
+        }),
+      );
+
+      const materialInner = tr.querySelector('.so-invoice__material-inner');
+      if (!materialInner) return;
+
+      if (!image) {
+        const existing = materialInner.querySelector('.so-invoice__thumb');
+        if (!existing) {
+          const empty = document.createElement('span');
+          empty.className = 'so-invoice__thumb is-empty';
+          empty.textContent = 'صورة';
+          materialInner.prepend(empty);
+        }
+        return;
+      }
+
+      let thumbBtn = materialInner.querySelector('button.so-invoice__thumb--zoom');
+      if (!(thumbBtn instanceof HTMLButtonElement)) {
+        thumbBtn = document.createElement('button');
+        thumbBtn.type = 'button';
+        thumbBtn.className = 'so-invoice__thumb so-invoice__thumb--zoom';
+        thumbBtn.setAttribute('data-store-product-preview', '');
+        thumbBtn.title = 'تكبير الصورة وتعديل الخصم';
+        const icon = document.createElement('span');
+        icon.className = 'so-invoice__thumb-zoom material-symbols-outlined';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = 'zoom_in';
+        thumbBtn.appendChild(icon);
+        const legacy = materialInner.querySelector('.so-invoice__thumb');
+        if (legacy) {
+          legacy.replaceWith(thumbBtn);
+        } else {
+          materialInner.prepend(thumbBtn);
+        }
+      }
+      let img = thumbBtn.querySelector('img');
+      if (!(img instanceof HTMLImageElement)) {
+        img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        thumbBtn.prepend(img);
+      }
+      img.src = image;
+    };
+
     const isManualMode = () => modeSelect?.value === 'manual';
     const isPerMaterialMode = () => pricingScope?.value === 'per_material' && isManualMode();
 
@@ -347,18 +422,6 @@
       materialCell.className = 'so-invoice__material';
       const material = document.createElement('div');
       material.className = 'so-invoice__material-inner';
-      const thumbWrap = document.createElement('span');
-      thumbWrap.className = 'so-invoice__thumb';
-      if (meta.image) {
-        const img = document.createElement('img');
-        img.src = meta.image;
-        img.alt = '';
-        img.loading = 'lazy';
-        thumbWrap.appendChild(img);
-      } else {
-        thumbWrap.classList.add('is-empty');
-        thumbWrap.textContent = 'صورة';
-      }
       const textWrap = document.createElement('span');
       textWrap.className = 'so-invoice__material-text';
       const nameEl = document.createElement('span');
@@ -371,9 +434,10 @@
         codeEl.textContent = code;
         textWrap.appendChild(codeEl);
       }
-      material.append(thumbWrap, textWrap);
+      material.append(textWrap);
       materialCell.appendChild(material);
       tr.appendChild(materialCell);
+      attachOfferPreviewLine(tr, guid, { name, code, image: meta.image || '' });
 
       const saleCell = document.createElement('td');
       saleCell.className = 'tabular-nums font-bold';
@@ -756,6 +820,14 @@
         syncRowsBusy = false;
       }
     };
+
+    perMaterialRows?.querySelectorAll('tr[data-override-guid]').forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+      if (!guid) return;
+      const meta = labelMap[guid] || {};
+      attachOfferPreviewLine(row, guid, meta);
+    });
 
     const bindInvoiceRowBehaviors = (rowsRoot) => {
       if (!(rowsRoot instanceof HTMLElement) || rowsRoot.getAttribute('data-so-bound') === '1') return;

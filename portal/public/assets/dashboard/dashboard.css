@@ -2441,6 +2441,67 @@ button.is-loading[data-loading-label],
   font-weight: 800;
 }
 
+.so-invoice__thumb--zoom {
+  position: relative;
+  padding: 0;
+  cursor: zoom-in;
+  border: 1px solid #e7e5e4;
+  background: #f5f5f4;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.so-invoice__thumb--zoom:hover,
+.so-invoice__thumb--zoom:focus-visible {
+  border-color: rgba(216, 25, 33, 0.45);
+  box-shadow: 0 0 0 2px rgba(216, 25, 33, 0.12);
+  outline: none;
+}
+
+.so-invoice__thumb-zoom {
+  position: absolute;
+  left: 0.12rem;
+  bottom: 0.12rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.store-product-preview__panel--offer .store-product-preview__detail-link {
+  display: none;
+}
+
+.store-product-preview__panel--offer .store-product-preview__cart {
+  margin-top: 0.35rem;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.so-offer-preview-edit {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.so-offer-preview-edit__label {
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.so-offer-preview-edit__block .so-invoice__values,
+.so-offer-preview-edit__block .so-invoice__qty-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 .so-invoice__material-text {
   display: flex;
   flex-direction: column;

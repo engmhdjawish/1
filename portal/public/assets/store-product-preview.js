@@ -24,6 +24,7 @@
     context: 'catalog',
     cartRoot: null,
     orderRoot: null,
+    offerRoot: null,
     itemScope: null,
     currentGuid: '',
   };
@@ -483,12 +484,15 @@
   const collectItems = (options = {}) => {
     const cartRoot = options.cartRoot || null;
     const orderRoot = options.orderRoot || null;
+    const offerRoot = options.offerRoot || null;
     const itemScope = options.itemScope || null;
     const items = [];
-    const scope = orderRoot || cartRoot || itemScope || document;
+    const scope = orderRoot || offerRoot || cartRoot || itemScope || document;
     let selector = '[data-store-preview-card]:not([data-store-cart-preview-line]):not([data-store-order-preview-line])';
     if (orderRoot) {
       selector = '[data-store-order-preview-line]';
+    } else if (offerRoot) {
+      selector = '[data-so-offer-preview-line]';
     } else if (cartRoot) {
       selector = '[data-store-cart-preview-line]';
     }
@@ -657,6 +661,143 @@
     if (!state.orderRoot || !item?.guid) return null;
     const card = state.orderRoot.querySelector(`[data-store-order-preview-line][data-preview-guid="${CSS.escape(item.guid)}"]`);
     return card?.closest('.dashboard-order-line')?.querySelector('.dashboard-order-line__edit-body') || null;
+  };
+
+  const findOfferInvoiceRow = (item) => {
+    if (!state.offerRoot || !item?.guid) return null;
+    return state.offerRoot.querySelector(`[data-so-offer-preview-line][data-preview-guid="${CSS.escape(item.guid)}"]`);
+  };
+
+  const bindMirroredField = (cloneEl, sourceEl) => {
+    if (!cloneEl || !sourceEl) return;
+    const syncToSource = () => {
+      if (cloneEl instanceof HTMLInputElement && sourceEl instanceof HTMLInputElement) {
+        if (cloneEl.type === 'checkbox') {
+          sourceEl.checked = cloneEl.checked;
+        } else {
+          sourceEl.value = cloneEl.value;
+        }
+      } else if (cloneEl instanceof HTMLSelectElement && sourceEl instanceof HTMLSelectElement) {
+        sourceEl.value = cloneEl.value;
+      } else {
+        sourceEl.value = cloneEl.value;
+      }
+      sourceEl.dispatchEvent(new Event('input', { bubbles: true }));
+      sourceEl.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    cloneEl.addEventListener('input', syncToSource);
+    cloneEl.addEventListener('change', syncToSource);
+  };
+
+  const mountOfferStaffEdit = (item, container) => {
+    if (!container) return;
+    container.querySelector('.store-product-preview__staff-edit')?.remove();
+    const row = findOfferInvoiceRow(item);
+    if (!(row instanceof HTMLElement)) return;
+
+    const wrap = document.createElement('details');
+    wrap.className = 'store-product-preview__staff-edit store-product-preview__staff-edit--offer';
+    wrap.open = true;
+
+    const summary = document.createElement('summary');
+    summary.className = 'store-product-preview__staff-edit-toggle';
+    summary.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">edit</span> تعديل خصم العرض';
+    wrap.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'store-product-preview__staff-edit-body so-offer-preview-edit';
+
+    const typeCell = row.querySelector('.so-invoice__type');
+    const valueCell = row.querySelector('.so-invoice__value');
+    const qtyCell = row.querySelector('.so-invoice__qty');
+    if (typeCell) {
+      const block = document.createElement('section');
+      block.className = 'so-offer-preview-edit__block';
+      const label = document.createElement('p');
+      label.className = 'so-offer-preview-edit__label';
+      label.textContent = 'نوع الحسم';
+      block.appendChild(label);
+      const clone = typeCell.cloneNode(true);
+      clone.querySelectorAll('select, input').forEach((cloneEl) => {
+        const field = cloneEl.getAttribute('data-field');
+        if (!field) return;
+        const sourceEl = row.querySelector(`[data-field="${field}"]`);
+        if (!sourceEl) return;
+        if (cloneEl instanceof HTMLInputElement || cloneEl instanceof HTMLSelectElement) {
+          cloneEl.value = sourceEl.value;
+          if (sourceEl.disabled) cloneEl.disabled = true;
+        }
+        bindMirroredField(cloneEl, sourceEl);
+      });
+      block.appendChild(clone);
+      body.appendChild(block);
+    }
+    if (valueCell) {
+      const block = document.createElement('section');
+      block.className = 'so-offer-preview-edit__block';
+      const label = document.createElement('p');
+      label.className = 'so-offer-preview-edit__label';
+      label.textContent = 'قيمة الخصم';
+      block.appendChild(label);
+      const clone = valueCell.cloneNode(true);
+      clone.querySelectorAll('select, input').forEach((cloneEl) => {
+        const field = cloneEl.getAttribute('data-field');
+        if (!field) return;
+        const sourceEl = row.querySelector(`[data-field="${field}"]`);
+        if (!sourceEl) return;
+        if (cloneEl instanceof HTMLInputElement || cloneEl instanceof HTMLSelectElement) {
+          cloneEl.value = sourceEl.value;
+          if (sourceEl.disabled) cloneEl.disabled = true;
+        }
+        bindMirroredField(cloneEl, sourceEl);
+      });
+      block.appendChild(clone);
+      body.appendChild(block);
+    }
+    if (qtyCell) {
+      const block = document.createElement('section');
+      block.className = 'so-offer-preview-edit__block';
+      const label = document.createElement('p');
+      label.className = 'so-offer-preview-edit__label';
+      label.textContent = 'كمية العرض';
+      block.appendChild(label);
+      const clone = qtyCell.cloneNode(true);
+      clone.querySelectorAll('select, input').forEach((cloneEl) => {
+        const field = cloneEl.getAttribute('data-field');
+        if (!field) return;
+        const sourceEl = row.querySelector(`[data-field="${field}"]`);
+        if (!sourceEl) return;
+        if (cloneEl instanceof HTMLInputElement || cloneEl instanceof HTMLSelectElement) {
+          cloneEl.value = sourceEl.value;
+        }
+        bindMirroredField(cloneEl, sourceEl);
+      });
+      block.appendChild(clone);
+      body.appendChild(block);
+    }
+
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+  };
+
+  const renderOfferStaffPanel = (item) => {
+    const row = findOfferInvoiceRow(item);
+    if (!(row instanceof HTMLElement)) {
+      return '<p class="store-product-preview__staff-note">عدّل الحسم من الجدول أو من لوحة التعديل أدناه.</p>';
+    }
+    const saleAttr = row.getAttribute('data-sale-usd');
+    const purchaseAttr = row.getAttribute('data-purchase-usd');
+    const sale = saleAttr ? Number(saleAttr).toFixed(2) : (row.cells[2]?.textContent?.trim() || '—');
+    const purchase = purchaseAttr ? Number(purchaseAttr).toFixed(2) : (row.cells[3]?.textContent?.trim() || '—');
+    const after = row.querySelector('[data-after-syp]')?.textContent?.trim() || '—';
+    return `<div class="store-product-preview__staff-order store-product-preview__staff-order--offer">
+      <div class="store-product-preview__staff-pricing">
+        <span class="store-product-preview__staff-unit" dir="ltr">مبيع $: ${esc(sale)}</span>
+        <span class="store-product-preview__staff-unit" dir="ltr">شراء $: ${esc(purchase)}</span>
+        <strong class="store-product-preview__staff-pack store-num" dir="ltr">بعد الخصم: ${esc(after)} ل.س</strong>
+      </div>
+      <p class="store-product-preview__staff-note">التعديل هنا يحدّث صف الفاتورة مباشرة قبل الحفظ.</p>
+    </div>`;
   };
 
   const bindPreviewOrderForms = (root) => {
@@ -1155,22 +1296,23 @@
     const total = state.items.length;
     const isCart = state.context === 'cart';
     const isOrder = state.context === 'order';
+    const isOffer = state.context === 'offer';
     const scopedCatalog = isScopedCatalog();
-    const pageInfo = (isCart || isOrder || scopedCatalog) ? {} : paging();
-    const hasPrevPage = !isCart && !isOrder && !!pageInfo.prevPageUrl;
-    const hasNextPage = !isCart && !isOrder && !!pageInfo.nextPageUrl;
+    const pageInfo = (isCart || isOrder || isOffer || scopedCatalog) ? {} : paging();
+    const hasPrevPage = !isCart && !isOrder && !isOffer && !!pageInfo.prevPageUrl;
+    const hasNextPage = !isCart && !isOrder && !isOffer && !!pageInfo.nextPageUrl;
     const atFirst = state.index <= 0;
     const atLast = state.index >= total - 1;
 
     if (counterEl) {
-      const pageLabel = !isCart && !isOrder && pageInfo.totalPages > 1
+      const pageLabel = !isCart && !isOrder && !isOffer && pageInfo.totalPages > 1
         ? ` — صفحة <span class="store-num" dir="ltr">${pageInfo.page}</span>/<span class="store-num" dir="ltr">${pageInfo.totalPages}</span>`
         : '';
-      const orderLabel = isOrder ? 'صنف ' : '';
+      const orderLabel = isOrder ? 'صنف ' : (isOffer ? 'مادة ' : '');
       counterEl.innerHTML = total > 0
         ? `${orderLabel}<span class="store-num" dir="ltr">${state.index + 1}</span> / <span class="store-num" dir="ltr">${total}</span>${pageLabel}`
         : '';
-      counterEl.classList.toggle('store-product-preview__counter--order', isOrder);
+      counterEl.classList.toggle('store-product-preview__counter--order', isOrder || isOffer);
     }
     if (btnPrev) btnPrev.disabled = state.navigating || (atFirst && !hasPrevPage);
     if (btnNext) btnNext.disabled = state.navigating || (atLast && !hasNextPage);
@@ -1193,6 +1335,7 @@
       panel.classList.toggle('store-product-preview__panel--soon', unavailable);
       panel.classList.toggle('store-product-preview__panel--cart', state.context === 'cart');
       panel.classList.toggle('store-product-preview__panel--order', state.context === 'order');
+      panel.classList.toggle('store-product-preview__panel--offer', state.context === 'offer');
     }
 
     if (imageWrap) {
@@ -1280,6 +1423,17 @@
       if (cartEl) {
         cartEl.innerHTML = renderOrderStaffPanel(item);
         mountOrderStaffEdit(item, cartEl);
+      }
+      if (detailEl) detailEl.classList.add('hidden');
+    } else if (state.context === 'offer') {
+      if (packagingEl) {
+        packagingEl.innerHTML = '';
+        packagingEl.hidden = true;
+      }
+      if (pricesEl) pricesEl.innerHTML = renderOfferStaffPanel(item);
+      if (cartEl) {
+        cartEl.innerHTML = '';
+        mountOfferStaffEdit(item, cartEl);
       }
       if (detailEl) detailEl.classList.add('hidden');
     } else {
@@ -1372,7 +1526,7 @@
       return;
     }
 
-    if (state.context === 'cart' || state.context === 'order' || isScopedCatalog()) {
+    if (state.context === 'cart' || state.context === 'order' || state.context === 'offer' || isScopedCatalog()) {
       return;
     }
 
@@ -1396,12 +1550,14 @@
   const open = (guid, preferElement = null, options = {}) => {
     const cartRoot = options.cartRoot || null;
     const orderRoot = options.orderRoot || null;
-    const itemScope = cartRoot || orderRoot ? null : (options.itemScope || null);
-    state.context = orderRoot ? 'order' : cartRoot ? 'cart' : 'catalog';
+    const offerRoot = options.offerRoot || null;
+    const itemScope = cartRoot || orderRoot || offerRoot ? null : (options.itemScope || null);
+    state.context = orderRoot ? 'order' : offerRoot ? 'offer' : cartRoot ? 'cart' : 'catalog';
     state.cartRoot = cartRoot;
     state.orderRoot = orderRoot;
+    state.offerRoot = offerRoot;
     state.itemScope = itemScope;
-    state.items = collectItems({ cartRoot, itemScope, orderRoot });
+    state.items = collectItems({ cartRoot, itemScope, orderRoot, offerRoot });
     if (state.items.length === 0) return;
     const idx = state.items.findIndex((item) => item.guid === guid);
     state.index = idx >= 0 ? idx : 0;
@@ -1431,6 +1587,7 @@
     document.body.style.overflow = '';
     state.cartRoot = null;
     state.orderRoot = null;
+    state.offerRoot = null;
     state.itemScope = null;
   };
 
@@ -1526,17 +1683,23 @@
     event.preventDefault();
     event.stopPropagation();
     const card = trigger.closest('[data-store-preview-card]');
-    const guid = card?.getAttribute('data-preview-guid') || '';
+    const previewLine = trigger.closest('[data-so-offer-preview-line]');
+    const guid = previewLine?.getAttribute('data-preview-guid')
+      || card?.getAttribute('data-preview-guid')
+      || '';
     if (!guid) return;
     const cartRoot = trigger.closest('[data-store-cart-preview-root]');
     const orderRoot = trigger.closest('[data-store-order-preview-root]');
-    const itemScope = cartRoot || orderRoot ? null : resolveItemScope(trigger);
+    const offerRoot = trigger.closest('[data-so-offer-preview-root]');
+    const itemScope = cartRoot || orderRoot || offerRoot ? null : resolveItemScope(trigger);
+    const effectiveGuid = guid;
     const sourceImg = trigger.querySelector('img')
       || trigger.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.dash-order-item__thumb img')
-      || card?.querySelector('.store-order-line-card__thumb img');
-    open(guid, sourceImg, { cartRoot, orderRoot, itemScope });
+      || card?.querySelector('.store-order-line-card__thumb img')
+      || previewLine?.querySelector('img');
+    open(effectiveGuid, sourceImg, { cartRoot, orderRoot, offerRoot, itemScope });
   });
 
   modal.querySelectorAll('[data-preview-close]').forEach((el) => {
