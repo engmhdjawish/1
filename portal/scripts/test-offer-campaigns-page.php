@@ -47,5 +47,13 @@ $assert('analytics merges inferred sales', str_contains($analyticsSrc, 'mergeInf
 $assert('analytics lists recent orders', str_contains($analyticsSrc, 'recentOrdersForOffer'));
 $orderSrc = (string) file_get_contents($root . '/src/Services/OrderService.php');
 $assert('orders enrich cart lines before save', str_contains($orderSrc, 'enrichLineWithOffer'));
+$assert('orders re-enrich after stock recheck', str_contains($orderSrc, 'recheckAvailable'));
+$assert('analytics backfills missing offer ids', str_contains($analyticsSrc, 'backfillRecentOrderAttribution'));
+$assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
+$stagnantSrc = (string) file_get_contents($root . '/src/Services/StagnantInventoryService.php');
+$assert('stagnant merges last sale stats', str_contains($stagnantSrc, 'attachLastSaleStats'));
+$previewJs = (string) file_get_contents($root . '/public/assets/store-product-preview.js');
+$assert('offer preview qty visibility helper', str_contains($previewJs, 'applyOfferQtyVisibility'));
+$assert('offer preview remove button', str_contains($previewJs, 'so-offer-preview-edit__remove'));
 
 echo "All offer campaigns checks passed.\n";

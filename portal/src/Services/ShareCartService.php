@@ -725,6 +725,13 @@ final class ShareCartService
     public static function enrichLineWithOffer(array $line): array
     {
         $existingOfferId = trim((string) ($line['special_offer_id'] ?? ''));
+        if ($existingOfferId === '' && is_array($line['offer'] ?? null)) {
+            $embeddedId = trim((string) ($line['offer']['id'] ?? ''));
+            if ($embeddedId !== '') {
+                $line['special_offer_id'] = $embeddedId;
+                $existingOfferId = $embeddedId;
+            }
+        }
         if ($existingOfferId !== '' && !empty($line['has_offer'])) {
             return self::normalizeLine($line);
         }
@@ -749,6 +756,34 @@ final class ShareCartService
             $offerSlug !== '' ? $offerSlug : null
         );
         if (empty($overlay['has_offer']) || !is_array($overlay['offer'] ?? null)) {
+            $saleSp = (float) ($line['sale_price_sp'] ?? 0);
+            $origSp = (float) ($line['original_sale_price_sp'] ?? 0);
+            $saleUsd = (float) ($line['sale_price_usd'] ?? 0);
+            $origUsd = (float) ($line['original_sale_price_usd'] ?? 0);
+            $discounted = ($origSp > $saleSp + 0.009) || ($origUsd > $saleUsd + 0.009);
+            if ($discounted && $existingOfferId === '') {
+                $resolved = SpecialOfferService::resolveForMaterial($guid, $product);
+                if ($resolved !== null) {
+                    $apiLine = self::lineFromApiItem($product, true);
+                    $packaging = max(1.0, (float) ($apiLine['packaging'] ?? 1));
+                    if ($origSp > 0) {
+                        $apiLine['original_unit_sale_price_sp'] = $origSp / $packaging;
+                        $apiLine['unit_sale_price_sp'] = $apiLine['original_unit_sale_price_sp'];
+                    }
+                    if ($origUsd > 0) {
+                        $apiLine['original_unit_sale_price_usd'] = $origUsd / $packaging;
+                        $apiLine['unit_sale_price_usd'] = $apiLine['original_unit_sale_price_usd'];
+                    }
+                    $enriched = SpecialOfferService::applyToCartLine(self::normalizeLine($apiLine), $resolved);
+                    $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
+                    if (trim((string) ($line['material_name_ar'] ?? '')) !== '') {
+                        $enriched['material_name_ar'] = (string) $line['material_name_ar'];
+                    }
+
+                    return $enriched;
+                }
+            }
+
             return $line;
         }
 

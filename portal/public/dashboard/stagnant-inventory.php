@@ -45,6 +45,7 @@ $maxAgeDays = $maxAgeRaw !== '' && is_numeric($maxAgeRaw)
 $sort = trim((string) ($_REQUEST['sort'] ?? 'age:desc'));
 $allowedSorts = [
     'age:desc', 'age:asc',
+    'lastSale:desc', 'lastSale:asc',
     'name:asc', 'name:desc',
     'price:desc', 'price:asc',
     'purchase:desc', 'purchase:asc',
@@ -65,6 +66,17 @@ $selectedStoreGuids = $parseList($_REQUEST['store_guids'] ?? []);
 $selectedCompanies = $parseList($_REQUEST['companies'] ?? []);
 $selectedMaterialTypes = $parseList($_REQUEST['material_types'] ?? []);
 $selectedGroupGuids = $parseList($_REQUEST['group_guids'] ?? []);
+$minDaysSinceLastSaleRaw = trim((string) ($_REQUEST['minDaysSinceLastSale'] ?? ''));
+$minDaysSinceLastSale = $minDaysSinceLastSaleRaw !== '' && is_numeric($minDaysSinceLastSaleRaw)
+    ? max(0, min(3650, (int) $minDaysSinceLastSaleRaw))
+    : null;
+$maxDaysSinceLastSaleRaw = trim((string) ($_REQUEST['maxDaysSinceLastSale'] ?? ''));
+$maxDaysSinceLastSale = $maxDaysSinceLastSaleRaw !== '' && is_numeric($maxDaysSinceLastSaleRaw)
+    ? max(0, min(3650, (int) $maxDaysSinceLastSaleRaw))
+    : null;
+if ($minDaysSinceLastSale !== null && $maxDaysSinceLastSale !== null && $maxDaysSinceLastSale < $minDaysSinceLastSale) {
+    $maxDaysSinceLastSale = $minDaysSinceLastSale;
+}
 
 $seasons = StoreSeasonService::seasons();
 $currentSeason = StoreSeasonService::current();
@@ -204,6 +216,8 @@ $fetch = StagnantInventoryService::fetch([
     'companies' => $selectedCompanies,
     'materialTypes' => $selectedMaterialTypes,
     'sort' => $sort,
+    'minDaysSinceLastSale' => $minDaysSinceLastSale,
+    'maxDaysSinceLastSale' => $maxDaysSinceLastSale,
     'page' => $page,
     'pageSize' => $pageSize,
 ]);

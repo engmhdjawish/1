@@ -668,6 +668,16 @@
     return state.offerRoot.querySelector(`[data-so-offer-preview-line][data-preview-guid="${CSS.escape(item.guid)}"]`);
   };
 
+  const applyOfferQtyVisibility = (root) => {
+    if (!(root instanceof HTMLElement)) return;
+    const modeEl = root.querySelector('[data-field="qty_mode"]');
+    const mode = modeEl instanceof HTMLSelectElement ? modeEl.value : 'unlimited';
+    root.querySelectorAll('[data-show-for-qty]').forEach((el) => {
+      const visible = el.getAttribute('data-show-for-qty') === mode;
+      el.classList.toggle('hidden', !visible);
+    });
+  };
+
   const bindMirroredField = (cloneEl, sourceEl) => {
     if (!cloneEl || !sourceEl) return;
     const syncToSource = () => {
@@ -685,8 +695,21 @@
       sourceEl.dispatchEvent(new Event('input', { bubbles: true }));
       sourceEl.dispatchEvent(new Event('change', { bubbles: true }));
     };
-    cloneEl.addEventListener('input', syncToSource);
-    cloneEl.addEventListener('change', syncToSource);
+    const syncWrap = () => {
+      syncToSource();
+      if (sourceEl.getAttribute('data-field') === 'qty_mode') {
+        const tableRow = sourceEl.closest('[data-override-guid], [data-so-offer-preview-line]');
+        if (tableRow instanceof HTMLElement) {
+          applyOfferQtyVisibility(tableRow);
+        }
+        const previewRoot = cloneEl.closest('.so-offer-preview-edit');
+        if (previewRoot instanceof HTMLElement) {
+          applyOfferQtyVisibility(previewRoot);
+        }
+      }
+    };
+    cloneEl.addEventListener('input', syncWrap);
+    cloneEl.addEventListener('change', syncWrap);
   };
 
   const mountOfferStaffEdit = (item, container) => {
@@ -774,7 +797,39 @@
       });
       block.appendChild(clone);
       body.appendChild(block);
+      applyOfferQtyVisibility(row);
+      applyOfferQtyVisibility(body);
+      const sourceQtyMode = row.querySelector('[data-field="qty_mode"]');
+      if (sourceQtyMode instanceof HTMLElement) {
+        sourceQtyMode.addEventListener('change', () => {
+          applyOfferQtyVisibility(row);
+          applyOfferQtyVisibility(body);
+          const previewQtyMode = body.querySelector('[data-field="qty_mode"]');
+          if (previewQtyMode instanceof HTMLSelectElement && sourceQtyMode instanceof HTMLSelectElement) {
+            previewQtyMode.value = sourceQtyMode.value;
+          }
+        });
+      }
     }
+
+  const actions = document.createElement('div');
+    actions.className = 'so-offer-preview-edit__actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'so-invoice__remove so-offer-preview-edit__remove';
+    removeBtn.textContent = 'حذف المادة';
+    removeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      const tableRemove = row.querySelector('[data-so-remove-row], .so-invoice__remove');
+      if (tableRemove instanceof HTMLElement) {
+        tableRemove.click();
+      } else {
+        row.remove();
+      }
+      wrap.remove();
+    });
+    actions.appendChild(removeBtn);
+    body.appendChild(actions);
 
     wrap.appendChild(body);
     container.appendChild(wrap);

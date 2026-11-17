@@ -211,7 +211,11 @@ final class OrderService
             $totalSp = 0.0;
             $totalUsd = 0.0;
             $sortOrder = 0;
-            foreach ($recheck['available'] as $item) {
+            $recheckAvailable = array_values(array_map(
+                static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+                $recheck['available']
+            ));
+            foreach ($recheckAvailable as $item) {
                 $materialGuid = trim((string) ($item['material_guid'] ?? ''));
                 $name = trim((string) ($item['material_name_ar'] ?? ''));
                 $quantity = (float) ($item['quantity'] ?? 0);

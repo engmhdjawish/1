@@ -23,6 +23,9 @@ final class SpecialOfferAnalyticsService
     {
         $includeEngagement = !empty($options['include_engagement']);
         $days = max(1, min(365, (int) ($options['days'] ?? 90)));
+        if (empty($options['skip_backfill'])) {
+            self::backfillRecentOrderAttribution($days);
+        }
         $offerIds = self::normalizeOfferIds($offerIds);
         $out = [];
         foreach ($offerIds as $id) {
@@ -370,6 +373,94 @@ final class SpecialOfferAnalyticsService
             . $alias . '.original_sale_price_usd IS NOT NULL AND ' . $alias . '.sale_price_usd IS NOT NULL AND '
             . $alias . '.original_sale_price_usd > ' . $alias . '.sale_price_usd + ' . $eps
             . '))';
+    }
+
+    private static bool $backfillRan = false;
+
+    private static function backfillRecentOrderAttribution(int $days): void
+    {
+        if (self::$backfillRan) {
+            return;
+        }
+        self::$backfillRan = true;
+
+        $days = max(1, min(365, $days));
+        $batch = 300;
+
+        try {
+            $pdo = Database::pdo();
+            $stmt = $pdo->prepare(
+                'SELECT oi.id::text AS item_id,
+                        oi.material_guid::text AS material_guid,
+                        oi.sale_price_sp, oi.sale_price_usd,
+                        oi.original_sale_price_sp, oi.original_sale_price_usd,
+                        oi.special_offer_id::text AS special_offer_id,
+                        o.created_at::text AS ordered_at
+                 FROM order_items oi
+                 INNER JOIN orders o ON o.id = oi.order_id
+                 WHERE oi.special_offer_id IS NULL
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')
+                   AND o.created_at >= NOW() - make_interval(days => :days)
+                 ORDER BY o.created_at DESC
+                 LIMIT ' . $batch
+            );
+            $stmt->execute(['days' => $days]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if ($rows === []) {
+                return;
+            }
+
+            $update = $pdo->prepare(
+                'UPDATE order_items SET
+                    special_offer_id = :offer_id,
+                    original_sale_price_sp = COALESCE(original_sale_price_sp, :orig_sp),
+                    original_sale_price_usd = COALESCE(original_sale_price_usd, :orig_usd)
+                 WHERE id = :id'
+            );
+
+            foreach ($rows as $row) {
+                $itemId = trim((string) ($row['item_id'] ?? ''));
+                $guid = trim((string) ($row['material_guid'] ?? ''));
+                $orderedAt = trim((string) ($row['ordered_at'] ?? ''));
+                if ($itemId === '' || $guid === '' || $orderedAt === '') {
+                    continue;
+                }
+
+                $line = [
+                    'sale_price_sp' => (float) ($row['sale_price_sp'] ?? 0),
+                    'sale_price_usd' => (float) ($row['sale_price_usd'] ?? 0),
+                    'original_sale_price_sp' => isset($row['original_sale_price_sp']) ? (float) $row['original_sale_price_sp'] : null,
+                    'original_sale_price_usd' => isset($row['original_sale_price_usd']) ? (float) $row['original_sale_price_usd'] : null,
+                ];
+                $enriched = ShareCartService::enrichLineWithOffer(array_merge($line, [
+                    'material_guid' => $guid,
+                    'quantity' => 1.0,
+                ]));
+                $offerId = trim((string) ($enriched['special_offer_id'] ?? ''));
+                if ($offerId === '') {
+                    $offerId = SpecialOfferService::resolveOfferIdForOrderLine($guid, $line, $orderedAt) ?? '';
+                }
+                if ($offerId === '') {
+                    continue;
+                }
+
+                $origSp = isset($enriched['original_sale_price_sp'])
+                    ? (float) $enriched['original_sale_price_sp']
+                    : ($line['original_sale_price_sp'] ?? null);
+                $origUsd = isset($enriched['original_sale_price_usd'])
+                    ? (float) $enriched['original_sale_price_usd']
+                    : ($line['original_sale_price_usd'] ?? null);
+
+                $update->execute([
+                    'id' => $itemId,
+                    'offer_id' => $offerId,
+                    'orig_sp' => $origSp,
+                    'orig_usd' => $origUsd,
+                ]);
+            }
+        } catch (\Throwable) {
+            // optional columns / missing tables on older installs
+        }
     }
 
     /**

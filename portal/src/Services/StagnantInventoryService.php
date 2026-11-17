@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Database;
+use PDO;
+
 /**
  * Decision-support for stagnant stock promotions via GET /api/materials/ages (FIFO).
  */
@@ -20,6 +23,8 @@ final class StagnantInventoryService
      *   companies?: list<string>,
      *   materialTypes?: list<string>,
      *   sort?: string,
+     *   minDaysSinceLastSale?: int|null,
+     *   maxDaysSinceLastSale?: int|null,
      *   page?: int,
      *   pageSize?: int
      * } $query
@@ -40,6 +45,15 @@ final class StagnantInventoryService
         $storeGuids = self::normalizeGuids($query['storeGuids'] ?? []);
         $companies = self::normalizeTexts($query['companies'] ?? []);
         $materialTypes = self::normalizeTexts($query['materialTypes'] ?? []);
+        $minDaysSinceLastSale = isset($query['minDaysSinceLastSale']) && $query['minDaysSinceLastSale'] !== null && $query['minDaysSinceLastSale'] !== ''
+            ? max(0, min(3650, (int) $query['minDaysSinceLastSale']))
+            : null;
+        $maxDaysSinceLastSale = isset($query['maxDaysSinceLastSale']) && $query['maxDaysSinceLastSale'] !== null && $query['maxDaysSinceLastSale'] !== ''
+            ? max(0, min(3650, (int) $query['maxDaysSinceLastSale']))
+            : null;
+        if ($minDaysSinceLastSale !== null && $maxDaysSinceLastSale !== null && $maxDaysSinceLastSale < $minDaysSinceLastSale) {
+            $maxDaysSinceLastSale = $minDaysSinceLastSale;
+        }
 
         $apiQuery = [
             'ageMode' => 'oldest',
@@ -109,9 +123,19 @@ final class StagnantInventoryService
 
         $payload = is_array($response['data'] ?? null) ? $response['data'] : [];
 
+        $normalized = self::normalizePayload($payload, $minAgeDays);
+        $items = is_array($normalized['items'] ?? null) ? $normalized['items'] : [];
+        $items = self::attachLastSaleStats($items);
+        $items = self::filterByLastSaleAge($items, $minDaysSinceLastSale, $maxDaysSinceLastSale);
+        $items = self::sortByLastSaleIfNeeded($items, $sort);
+        $normalized['items'] = $items;
+        if ($minDaysSinceLastSale !== null || $maxDaysSinceLastSale !== null) {
+            $normalized['filteredByLastSale'] = true;
+        }
+
         return [
             'ok' => true,
-            'data' => self::normalizePayload($payload, $minAgeDays),
+            'data' => $normalized,
         ];
     }
 
@@ -258,6 +282,8 @@ final class StagnantInventoryService
                 'stagnantRemainingQty' => (float) ($row['remainingQuantity'] ?? $row['RemainingQuantity'] ?? 0),
                 'maxAgeDays' => (float) ($row['oldestAgeDays'] ?? $row['OldestAgeDays'] ?? 0),
                 'oldestPurchaseDate' => $oldestDate,
+                'lastSaleDate' => '',
+                'daysSinceLastSale' => null,
                 'unitSalePriceUsd' => self::nullableNumber($row['half'] ?? $row['Half'] ?? null),
                 'unitPurchasePriceUsd' => self::nullableNumber($row['endUser'] ?? $row['EndUser'] ?? null),
                 'unitSalePriceSyp' => self::nullableNumber($row['whole'] ?? $row['Whole'] ?? null),
@@ -320,6 +346,133 @@ final class StagnantInventoryService
         }
 
         return null;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function attachLastSaleStats(array $items): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $guids = [];
+        foreach ($items as $row) {
+            $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
+            if ($guid !== '') {
+                $guids[$guid] = true;
+            }
+        }
+        $guidList = array_keys($guids);
+        if ($guidList === []) {
+            return $items;
+        }
+
+        $lastByGuid = [];
+        try {
+            $placeholders = [];
+            $params = [];
+            foreach ($guidList as $index => $guid) {
+                $key = 'g' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $guid;
+            }
+            $stmt = Database::pdo()->prepare(
+                'SELECT lower(oi.material_guid::text) AS material_guid,
+                        MAX(o.created_at) AS last_sale_at
+                 FROM order_items oi
+                 INNER JOIN orders o ON o.id = oi.order_id
+                 WHERE lower(oi.material_guid::text) IN (' . implode(', ', $placeholders) . ')
+                   AND o.status NOT IN (\'cancelled\', \'rejected\')
+                 GROUP BY lower(oi.material_guid::text)'
+            );
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $saleRow) {
+                $g = strtolower(trim((string) ($saleRow['material_guid'] ?? '')));
+                $at = (string) ($saleRow['last_sale_at'] ?? '');
+                if ($g !== '' && $at !== '') {
+                    $lastByGuid[$g] = $at;
+                }
+            }
+        } catch (\Throwable) {
+            return $items;
+        }
+
+        $now = time();
+        foreach ($items as &$row) {
+            $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
+            $lastAt = $lastByGuid[$guid] ?? '';
+            if ($lastAt === '') {
+                $row['lastSaleDate'] = '';
+                $row['daysSinceLastSale'] = null;
+                continue;
+            }
+            $ts = strtotime($lastAt);
+            $row['lastSaleDate'] = $ts ? date('Y-m-d', $ts) : substr($lastAt, 0, 10);
+            $row['daysSinceLastSale'] = $ts ? max(0, (int) floor(($now - $ts) / 86400)) : null;
+        }
+        unset($row);
+
+        return $items;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function filterByLastSaleAge(array $items, ?int $minDays, ?int $maxDays): array
+    {
+        if ($minDays === null && $maxDays === null) {
+            return $items;
+        }
+
+        return array_values(array_filter($items, static function (array $row) use ($minDays, $maxDays): bool {
+            $days = $row['daysSinceLastSale'] ?? null;
+            if ($days === null) {
+                return $minDays === null;
+            }
+            $days = (int) $days;
+            if ($minDays !== null && $days < $minDays) {
+                return false;
+            }
+            if ($maxDays !== null && $days > $maxDays) {
+                return false;
+            }
+
+            return true;
+        }));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function sortByLastSaleIfNeeded(array $items, string $sort): array
+    {
+        if (!in_array($sort, ['lastSale:desc', 'lastSale:asc'], true)) {
+            return $items;
+        }
+
+        usort($items, static function (array $a, array $b) use ($sort): int {
+            $da = $a['daysSinceLastSale'] ?? null;
+            $db = $b['daysSinceLastSale'] ?? null;
+            if ($da === null && $db === null) {
+                return 0;
+            }
+            if ($da === null) {
+                return 1;
+            }
+            if ($db === null) {
+                return -1;
+            }
+            $cmp = (int) $da <=> (int) $db;
+
+            return $sort === 'lastSale:desc' ? -$cmp : $cmp;
+        });
+
+        return $items;
     }
 
     /**
