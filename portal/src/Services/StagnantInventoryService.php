@@ -358,51 +358,29 @@ final class StagnantInventoryService
             return [];
         }
 
-        $guids = [];
+        $guidList = [];
+        $codeByGuid = [];
         foreach ($items as $row) {
-            $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
-            if ($guid !== '') {
-                $guids[$guid] = true;
+            $guid = self::normalizeMaterialGuid((string) ($row['materialGuid'] ?? ''));
+            if ($guid === '') {
+                continue;
+            }
+            $guidList[$guid] = true;
+            $code = trim((string) ($row['materialCode'] ?? ''));
+            if ($code !== '') {
+                $codeByGuid[$guid] = strtolower($code);
             }
         }
-        $guidList = array_keys($guids);
         if ($guidList === []) {
             return $items;
         }
 
-        $lastByGuid = [];
-        try {
-            $placeholders = [];
-            $params = [];
-            foreach ($guidList as $index => $guid) {
-                $key = 'g' . $index;
-                $placeholders[] = ':' . $key;
-                $params[$key] = $guid;
-            }
-            $stmt = Database::pdo()->prepare(
-                'SELECT lower(oi.material_guid::text) AS material_guid,
-                        MAX(o.created_at) AS last_sale_at
-                 FROM order_items oi
-                 INNER JOIN orders o ON o.id = oi.order_id
-                 WHERE lower(oi.material_guid::text) IN (' . implode(', ', $placeholders) . ')
-                   AND o.status NOT IN (\'cancelled\', \'rejected\')
-                 GROUP BY lower(oi.material_guid::text)'
-            );
-            $stmt->execute($params);
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $saleRow) {
-                $g = strtolower(trim((string) ($saleRow['material_guid'] ?? '')));
-                $at = (string) ($saleRow['last_sale_at'] ?? '');
-                if ($g !== '' && $at !== '') {
-                    $lastByGuid[$g] = $at;
-                }
-            }
-        } catch (\Throwable) {
-            return $items;
-        }
+        $lastByGuid = self::lastSaleTimestampsFromPortalOrders(array_keys($guidList), $codeByGuid);
+        $lastByGuid = self::mergeLastSaleTimestampsFromErp(array_keys($guidList), $lastByGuid);
 
         $now = time();
         foreach ($items as &$row) {
-            $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
+            $guid = self::normalizeMaterialGuid((string) ($row['materialGuid'] ?? ''));
             $lastAt = $lastByGuid[$guid] ?? '';
             if ($lastAt === '') {
                 $row['lastSaleDate'] = '';
@@ -416,6 +394,178 @@ final class StagnantInventoryService
         unset($row);
 
         return $items;
+    }
+
+    /**
+     * @param list<string> $guidList lowercase UUIDs
+     * @param array<string, string> $codeByGuid guid => lowercase material code
+     * @return array<string, string> guid => last sale timestamp string
+     */
+    private static function lastSaleTimestampsFromPortalOrders(array $guidList, array $codeByGuid): array
+    {
+        $lastByGuid = [];
+        if ($guidList === []) {
+            return $lastByGuid;
+        }
+
+        try {
+            foreach (array_chunk($guidList, 120) as $chunk) {
+                $placeholders = [];
+                $params = [];
+                foreach ($chunk as $index => $guid) {
+                    $key = 'g' . $index;
+                    $placeholders[] = ':' . $key;
+                    $params[$key] = $guid;
+                }
+                $stmt = Database::pdo()->prepare(
+                    'SELECT lower(trim(oi.material_guid::text)) AS material_guid,
+                            MAX(o.created_at) AS last_sale_at
+                     FROM order_items oi
+                     INNER JOIN orders o ON o.id = oi.order_id
+                     WHERE lower(trim(oi.material_guid::text)) IN (' . implode(', ', $placeholders) . ')
+                       AND o.status NOT IN (\'cancelled\', \'rejected\')
+                     GROUP BY lower(trim(oi.material_guid::text))'
+                );
+                $stmt->execute($params);
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $saleRow) {
+                    $g = strtolower(trim((string) ($saleRow['material_guid'] ?? '')));
+                    $at = trim((string) ($saleRow['last_sale_at'] ?? ''));
+                    if ($g !== '' && $at !== '') {
+                        $lastByGuid[$g] = $at;
+                    }
+                }
+            }
+
+            $codes = array_values(array_unique(array_filter(array_values($codeByGuid))));
+            if ($codes !== []) {
+                foreach (array_chunk($codes, 120) as $chunk) {
+                    $placeholders = [];
+                    $params = [];
+                    foreach ($chunk as $index => $code) {
+                        $key = 'c' . $index;
+                        $placeholders[] = ':' . $key;
+                        $params[$key] = $code;
+                    }
+                    $stmt = Database::pdo()->prepare(
+                        'SELECT lower(trim(oi.material_code)) AS material_code,
+                                lower(trim(oi.material_guid::text)) AS material_guid,
+                                MAX(o.created_at) AS last_sale_at
+                         FROM order_items oi
+                         INNER JOIN orders o ON o.id = oi.order_id
+                         WHERE lower(trim(oi.material_code)) IN (' . implode(', ', $placeholders) . ')
+                           AND o.status NOT IN (\'cancelled\', \'rejected\')
+                         GROUP BY lower(trim(oi.material_code)), lower(trim(oi.material_guid::text))'
+                    );
+                    $stmt->execute($params);
+                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $saleRow) {
+                        $g = strtolower(trim((string) ($saleRow['material_guid'] ?? '')));
+                        $code = strtolower(trim((string) ($saleRow['material_code'] ?? '')));
+                        $at = trim((string) ($saleRow['last_sale_at'] ?? ''));
+                        if ($at === '') {
+                            continue;
+                        }
+                        if ($g !== '') {
+                            $lastByGuid[$g] = self::maxSaleTimestamp($lastByGuid[$g] ?? '', $at);
+                        }
+                        foreach ($codeByGuid as $itemGuid => $itemCode) {
+                            if ($itemCode === $code) {
+                                $lastByGuid[$itemGuid] = self::maxSaleTimestamp($lastByGuid[$itemGuid] ?? '', $at);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            return $lastByGuid;
+        }
+
+        return $lastByGuid;
+    }
+
+    /**
+     * @param list<string> $guidList
+     * @param array<string, string> $lastByGuid
+     * @return array<string, string>
+     */
+    private static function mergeLastSaleTimestampsFromErp(array $guidList, array $lastByGuid): array
+    {
+        foreach (array_chunk($guidList, 80) as $chunk) {
+            $payloadGuids = [];
+            foreach ($chunk as $guid) {
+                if (self::isUuid($guid)) {
+                    $payloadGuids[] = $guid;
+                }
+            }
+            if ($payloadGuids === []) {
+                continue;
+            }
+            try {
+                $response = ApiClient::postJson('/api/materials/last-sales', [
+                    'materialGuids' => $payloadGuids,
+                ], 120);
+                if (!($response['ok'] ?? false)) {
+                    continue;
+                }
+                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+                $rows = $data['items'] ?? $data['Items'] ?? [];
+                if (!is_array($rows)) {
+                    continue;
+                }
+                foreach ($rows as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $guid = self::normalizeMaterialGuid((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? ''));
+                    $date = trim((string) ($row['lastSaleDate'] ?? $row['LastSaleDate'] ?? ''));
+                    if ($guid === '' || strlen($date) < 10) {
+                        continue;
+                    }
+                    $at = substr($date, 0, 10) . ' 12:00:00';
+                    $lastByGuid[$guid] = self::maxSaleTimestamp($lastByGuid[$guid] ?? '', $at);
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $lastByGuid;
+    }
+
+    private static function maxSaleTimestamp(string $existing, string $candidate): string
+    {
+        $existing = trim($existing);
+        $candidate = trim($candidate);
+        if ($existing === '') {
+            return $candidate;
+        }
+        if ($candidate === '') {
+            return $existing;
+        }
+        $existingTs = strtotime($existing) ?: 0;
+        $candidateTs = strtotime($candidate) ?: 0;
+
+        return $candidateTs >= $existingTs ? $candidate : $existing;
+    }
+
+    private static function normalizeMaterialGuid(string $guid): string
+    {
+        $guid = strtolower(trim($guid));
+        if ($guid === '') {
+            return '';
+        }
+        if (!self::isUuid($guid)) {
+            return '';
+        }
+
+        return $guid;
+    }
+
+    private static function isUuid(string $value): bool
+    {
+        return (bool) preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
+            $value
+        );
     }
 
     /**

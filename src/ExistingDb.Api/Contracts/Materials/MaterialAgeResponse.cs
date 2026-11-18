@@ -72,3 +72,9 @@ public sealed record MaterialAgeBillTypeResponse(
     bool IsInput,
     bool MovesStock,
     int PostedBillCount);
+
+public sealed record MaterialLastSaleBatchRequest(IReadOnlyList<Guid> MaterialGuids);
+
+public sealed record MaterialLastSaleListResponse(IReadOnlyList<MaterialLastSaleRowResponse> Items);
+
+public sealed record MaterialLastSaleRowResponse(Guid MaterialGuid, DateOnly LastSaleDate);

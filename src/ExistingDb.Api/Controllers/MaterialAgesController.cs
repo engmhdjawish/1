@@ -20,6 +20,21 @@ public sealed class MaterialAgesController(MaterialAgeQuery materialAgeQuery) : 
         return Ok(result);
     }
 
+    [HttpPost("last-sales")]
+    public async Task<ActionResult<MaterialLastSaleListResponse>> GetLastSales(
+        [FromBody] MaterialLastSaleBatchRequest? body,
+        CancellationToken cancellationToken = default)
+    {
+        var guids = body?.MaterialGuids ?? [];
+        if (guids.Count > 500)
+        {
+            return BadRequest(new { message = "materialGuids supports at most 500 values per request." });
+        }
+
+        var result = await materialAgeQuery.ListLastSaleDatesAsync(guids, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("ages")]
     public async Task<ActionResult<MaterialAgeResponse>> GetAges(
         [FromQuery] string? asOf = null,

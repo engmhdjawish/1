@@ -1116,4 +1116,84 @@ WHERE ms.[MatGUID] IS NOT NULL
             .Replace("%", "\\%", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal)
             .Replace("[", "\\[", StringComparison.Ordinal);
+
+    /// <summary>Latest posted outbound (sale) bill date per material in Amine.</summary>
+    public async Task<MaterialLastSaleListResponse> ListLastSaleDatesAsync(
+        IReadOnlyList<Guid> materialGuids,
+        CancellationToken cancellationToken)
+    {
+        var distinct = materialGuids
+            .Where(guid => guid != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (distinct.Length == 0)
+        {
+            return new MaterialLastSaleListResponse([]);
+        }
+
+        var connection = mainDbContext.Database.GetDbConnection();
+        var sqlConnection = connection as SqlConnection
+            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
+
+        var shouldClose = sqlConnection.State != ConnectionState.Open;
+        if (shouldClose)
+        {
+            await sqlConnection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            var billTypes = await LoadBillTypesAsync(sqlConnection, cancellationToken);
+            var outboundTypes = billTypes
+                .Where(type => type.MovesStock && !type.IsInput)
+                .Select(type => type.BillTypeGuid)
+                .ToArray();
+            if (outboundTypes.Length == 0)
+            {
+                return new MaterialLastSaleListResponse([]);
+            }
+
+            var rows = new List<MaterialLastSaleRowResponse>();
+            foreach (var batch in distinct.Chunk(MaterialBatchSize))
+            {
+                var sql = new StringBuilder();
+                sql.Append("""
+SELECT
+    bi.[MatGUID]                      AS MaterialGuid,
+    MAX(CAST(bu.[Date] AS date))      AS LastSaleDate
+FROM dbo.[bi000] AS bi
+INNER JOIN dbo.[bu000] AS bu ON bu.[GUID] = bi.[ParentGUID]
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = bu.[TypeGUID]
+WHERE ISNULL(bu.[IsPosted], 0) <> 0
+  AND ISNULL(bt.[bNoPost], 0) = 0
+  AND ISNULL(bt.[bIsInput], 0) = 0
+  AND bi.[MatGUID] IS NOT NULL
+""");
+
+                await using var cmd = sqlConnection.CreateCommand();
+                cmd.CommandTimeout = CommandTimeoutSeconds;
+                AppendGuidIn(sql, cmd, "bi.[MatGUID]", batch, "m");
+                AppendGuidIn(sql, cmd, "bt.[GUID]", outboundTypes, "t");
+                sql.Append("\nGROUP BY bi.[MatGUID]");
+                cmd.CommandText = sql.ToString();
+
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    rows.Add(new MaterialLastSaleRowResponse(
+                        reader.GetGuid(0),
+                        DateOnly.FromDateTime(reader.GetDateTime(1))));
+                }
+            }
+
+            return new MaterialLastSaleListResponse(rows);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await sqlConnection.CloseAsync();
+            }
+        }
+    }
 }

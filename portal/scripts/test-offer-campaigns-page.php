@@ -64,6 +64,11 @@ $assert('cart lines attribute offer from session slug', str_contains($shareCart,
 $assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
 $stagnantSrc = (string) file_get_contents($root . '/src/Services/StagnantInventoryService.php');
 $assert('stagnant merges last sale stats', str_contains($stagnantSrc, 'attachLastSaleStats'));
+$assert('stagnant loads erp last sales', str_contains($stagnantSrc, 'mergeLastSaleTimestampsFromErp'));
+$assert('api last-sales endpoint exists', str_contains(
+    (string) file_get_contents($root . '/../src/ExistingDb.Api/Controllers/MaterialAgesController.cs'),
+    'last-sales'
+));
 $previewJs = (string) file_get_contents($root . '/public/assets/store-product-preview.js');
 $assert('offer preview qty visibility helper', str_contains($previewJs, 'applyOfferQtyVisibility'));
 $assert('offer preview remove button', str_contains($previewJs, 'so-offer-preview-edit__remove'));
