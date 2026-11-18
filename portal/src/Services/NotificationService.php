@@ -1302,7 +1302,7 @@ final class NotificationService
     }
 
     /** @param array<string, mixed> $offer */
-    public static function syncSpecialOfferNotification(array $offer): void
+    public static function syncSpecialOfferNotification(array $offer, bool $allowBroadcast = false): void
     {
         try {
             self::ensureTable();
@@ -1328,6 +1328,20 @@ final class NotificationService
                     }
                 } catch (\Throwable) {
                 }
+            }
+
+            $startsAt = trim((string) ($offer['starts_at'] ?? ''));
+            if ($startsAt !== '') {
+                try {
+                    if (new \DateTimeImmutable($startsAt) > new \DateTimeImmutable('now')) {
+                        return;
+                    }
+                } catch (\Throwable) {
+                }
+            }
+
+            if (!$allowBroadcast) {
+                return;
             }
 
             if (self::hasOpenReference('special_offer', self::REF_TYPE_SPECIAL_OFFER, $offerId)) {
@@ -1876,6 +1890,13 @@ final class NotificationService
         }
 
         return in_array(strtolower(trim((string) $value)), ['1', 't', 'true', 'yes', 'on'], true);
+    }
+
+    public static function hasOpenOfferNotification(string $offerId): bool
+    {
+        $offerId = trim($offerId);
+
+        return $offerId !== '' && self::hasOpenReference('special_offer', self::REF_TYPE_SPECIAL_OFFER, $offerId);
     }
 
     private static function hasOpenReference(string $source, string $referenceType, string $referenceId): bool

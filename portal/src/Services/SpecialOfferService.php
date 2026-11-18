@@ -661,7 +661,7 @@ final class SpecialOfferService
                 $materialGuids,
                 $selectionMode === 'manual' ? $productOverrides : []
             );
-            self::syncOfferNotification($id);
+            self::syncOfferNotification($id, !empty($payload['notify_customers']));
         } catch (\Throwable $e) {
             return [
                 'ok' => false,
@@ -803,14 +803,51 @@ final class SpecialOfferService
         $stmt = Database::pdo()->prepare('UPDATE special_offers SET is_active = :active WHERE id = :id');
         $stmt->execute(['id' => $id, 'active' => $active ? 'true' : 'false']);
         $updated = $stmt->rowCount() > 0;
-        if ($updated) {
-            self::syncOfferNotification($id);
+        if ($updated && !$active) {
+            NotificationService::syncSpecialOfferNotification([
+                'id' => $id,
+                'is_active' => false,
+            ]);
         }
 
         return $updated;
     }
 
-    private static function syncOfferNotification(string $id): void
+  /**
+   * Send customer notification when scheduled offers reach their start time (once per offer).
+   */
+    public static function publishDueScheduledOfferNotifications(): void
+    {
+        static $ran = false;
+        if ($ran) {
+            return;
+        }
+        $ran = true;
+
+        try {
+            $stmt = Database::pdo()->query(
+                'SELECT id::text AS id, slug, title_ar, subtitle_ar,
+                        starts_at::text AS starts_at, ends_at::text AS ends_at, is_active
+                 FROM special_offers
+                 WHERE is_active = TRUE
+                   AND starts_at IS NOT NULL
+                   AND starts_at <= NOW()
+                   AND starts_at >= NOW() - interval \'21 days\'
+                   AND (ends_at IS NULL OR ends_at > NOW())'
+            );
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as $row) {
+                $id = trim((string) ($row['id'] ?? ''));
+                if ($id === '' || NotificationService::hasOpenOfferNotification($id)) {
+                    continue;
+                }
+                NotificationService::syncSpecialOfferNotification($row, true);
+            }
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function syncOfferNotification(string $id, bool $allowBroadcast = false): void
     {
         $id = trim($id);
         if ($id === '') {
@@ -819,7 +856,8 @@ final class SpecialOfferService
 
         try {
             $stmt = Database::pdo()->prepare(
-                'SELECT id::text AS id, slug, title_ar, subtitle_ar, ends_at::text AS ends_at, is_active
+                'SELECT id::text AS id, slug, title_ar, subtitle_ar,
+                        starts_at::text AS starts_at, ends_at::text AS ends_at, is_active
                  FROM special_offers
                  WHERE id = :id
                  LIMIT 1'
@@ -834,7 +872,7 @@ final class SpecialOfferService
 
                 return;
             }
-            NotificationService::syncSpecialOfferNotification($row);
+            NotificationService::syncSpecialOfferNotification($row, $allowBroadcast);
         } catch (\Throwable) {
         }
     }
@@ -876,6 +914,138 @@ final class SpecialOfferService
         }
 
         return $best;
+    }
+
+    /**
+     * Active offers whose window includes a specific order time (includes inactive if still in window).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function offersForOrderInstant(string $orderedAt): array
+    {
+        $orderedAt = trim($orderedAt);
+        if ($orderedAt === '') {
+            return [];
+        }
+
+        try {
+            if (self::hasExtendedOfferPricingColumns()) {
+                $stmt = Database::pdo()->prepare(
+                    'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
+                            pricing_scope, discount_type::text AS discount_type, discount_percent,
+                            fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
+                            priority, min_packages, max_packages, starts_at, ends_at::text AS ends_at
+                     FROM special_offers
+                     WHERE starts_at <= :at AND (ends_at IS NULL OR ends_at > :at)
+                     ORDER BY priority DESC, starts_at DESC'
+                );
+            } else {
+                $stmt = Database::pdo()->prepare(
+                    'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
+                            discount_type::text AS discount_type, discount_percent,
+                            fixed_price_syp, fixed_price_usd,
+                            priority, min_packages, max_packages, starts_at, ends_at::text AS ends_at
+                     FROM special_offers
+                     WHERE starts_at <= :at AND (ends_at IS NULL OR ends_at > :at)
+                     ORDER BY priority DESC, starts_at DESC'
+                );
+            }
+            $stmt->execute(['at' => $orderedAt]);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $offerIds = array_map(static fn (array $row): string => (string) $row['id'], $rows);
+        $filtersByOffer = self::batchFiltersForOffers($offerIds);
+        $manualByOffer = self::batchManualProductRowsForOffers($offerIds);
+
+        foreach ($rows as &$row) {
+            $id = (string) $row['id'];
+            $parsed = self::parseFilterRows($filtersByOffer[$id] ?? []);
+            $row['filter_rules'] = $parsed['rules'];
+            $manual = $manualByOffer[$id] ?? ['guids' => [], 'overrides' => []];
+            $row['material_guids'] = $manual['guids'];
+            $row['product_overrides'] = $manual['overrides'];
+            $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * Best-effort offer id for a persisted order line (manual + filter offers).
+     *
+     * @param array<string, mixed> $line order_items row fields
+     */
+    public static function resolveOfferIdForOrderLine(string $materialGuid, array $line, string $orderedAt): ?string
+    {
+        $materialGuid = strtolower(trim($materialGuid));
+        if ($materialGuid === '') {
+            return null;
+        }
+
+        $existing = trim((string) ($line['special_offer_id'] ?? ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+
+        $offers = self::offersForOrderInstant($orderedAt);
+        if ($offers === []) {
+            return null;
+        }
+
+        $material = null;
+        $lineSaleSp = (float) ($line['sale_price_sp'] ?? 0);
+        $lineSaleUsd = (float) ($line['sale_price_usd'] ?? 0);
+        $lineOrigSp = (float) ($line['original_sale_price_sp'] ?? 0);
+        $lineOrigUsd = (float) ($line['original_sale_price_usd'] ?? 0);
+        $eps = 0.05;
+
+        $bestId = null;
+        $bestScore = null;
+
+        foreach ($offers as $offer) {
+            if ($material === null) {
+                $material = StoreCatalogService::findMaterial($materialGuid);
+                if ($material === null) {
+                    $material = ['materialGuid' => $materialGuid];
+                }
+            }
+
+            if (!self::offerIncludesMaterial($offer, $materialGuid, $material)) {
+                continue;
+            }
+
+            $pricing = self::computePricing($material, $offer);
+            $effSp = (float) ($pricing['effective_package_sale_price_sp'] ?? 0);
+            $effUsd = (float) ($pricing['effective_package_sale_price_usd'] ?? 0);
+            $origSp = (float) ($pricing['original_package_sale_price_sp'] ?? 0);
+            $origUsd = (float) ($pricing['original_package_sale_price_usd'] ?? 0);
+
+            $priceMatch = ($lineSaleSp > 0 && $effSp > 0 && abs($lineSaleSp - $effSp) <= max($eps, $effSp * 0.002))
+                || ($lineSaleUsd > 0 && $effUsd > 0 && abs($lineSaleUsd - $effUsd) <= max($eps, $effUsd * 0.002));
+            $discountMatch = ($lineOrigSp > $lineSaleSp + $eps)
+                || ($lineOrigUsd > $lineSaleUsd + $eps)
+                || ($origSp > $effSp + $eps && $lineSaleSp > 0 && abs($lineSaleSp - $effSp) <= max($eps, $effSp * 0.02));
+
+            if (!$priceMatch && !$discountMatch) {
+                continue;
+            }
+
+            $score = self::offerSortScore($pricing, $offer);
+            if ($bestId === null || $score < $bestScore) {
+                $bestId = (string) ($offer['id'] ?? '');
+                $bestScore = $score;
+            }
+        }
+
+        return $bestId !== '' ? $bestId : null;
     }
 
     /** @param array<string, mixed> $material */

@@ -95,7 +95,8 @@ final class OrderService
         ?string $notesAr,
         array $items,
         ?string $webCustomerId = null,
-        ?string $visitorSessionId = null
+        ?string $visitorSessionId = null,
+        ?string $storeOfferSlug = null
     ): array {
         $shareLinkId = trim($shareLinkId);
         $guestNameAr = trim($guestNameAr);
@@ -106,10 +107,25 @@ final class OrderService
             return ['ok' => false, 'message' => 'بيانات الطلب غير مكتملة.'];
         }
 
-        $items = array_values(array_map(
-            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
-            $items
-        ));
+        $storeOfferSlug = trim((string) ($storeOfferSlug ?? ''));
+        if ($storeOfferSlug === '' && isset($_SESSION['store_cart_context']['offer'])) {
+            $storeOfferSlug = trim((string) $_SESSION['store_cart_context']['offer']);
+        }
+        $visitorSessionId = trim((string) ($visitorSessionId ?? ''));
+        if (strlen($visitorSessionId) > 120) {
+            $visitorSessionId = substr($visitorSessionId, 0, 120);
+        }
+        $attrAt = date('Y-m-d H:i:s');
+        $attributeLine = static function (array $line) use ($storeOfferSlug, $visitorSessionId, $attrAt): array {
+            return ShareCartService::attributeOfferOnLine(
+                $line,
+                $storeOfferSlug !== '' ? $storeOfferSlug : null,
+                $visitorSessionId !== '' ? $visitorSessionId : null,
+                $attrAt
+            );
+        };
+
+        $items = array_values(array_map($attributeLine, $items));
 
         $shareLinkId = trim($shareLinkId);
 
@@ -172,10 +188,6 @@ final class OrderService
         $pdo = Database::pdo();
         $orderNumber = self::generateOrderNumber();
         $quoteToken = bin2hex(random_bytes(32));
-        $visitorSessionId = trim((string) ($visitorSessionId ?? ''));
-        if (strlen($visitorSessionId) > 120) {
-            $visitorSessionId = substr($visitorSessionId, 0, 120);
-        }
         $storeVisitorSession = $visitorSessionId !== '' && VisitorLogService::ordersHaveVisitorSessionColumn();
 
         try {
@@ -211,7 +223,8 @@ final class OrderService
             $totalSp = 0.0;
             $totalUsd = 0.0;
             $sortOrder = 0;
-            foreach ($recheck['available'] as $item) {
+            $recheckAvailable = array_values(array_map($attributeLine, $recheck['available']));
+            foreach ($recheckAvailable as $item) {
                 $materialGuid = trim((string) ($item['material_guid'] ?? ''));
                 $name = trim((string) ($item['material_name_ar'] ?? ''));
                 $quantity = (float) ($item['quantity'] ?? 0);
@@ -387,6 +400,28 @@ final class OrderService
             if ($webCustomerId !== null && trim($webCustomerId) !== '') {
                 $customerPayload = ['id' => trim($webCustomerId), 'name_ar' => $guestNameAr, 'phone' => $guestPhone];
             }
+            $logOfferSlug = $storeOfferSlug;
+            if ($logOfferSlug === '') {
+                foreach ($normalizedItems as $line) {
+                    $logOfferSlug = trim((string) ($line['added_store_offer'] ?? $line['offer_slug'] ?? ''));
+                    if ($logOfferSlug !== '') {
+                        break;
+                    }
+                    $logOfferSlug = trim((string) ($line['special_offer_id'] ?? ''));
+                    if ($logOfferSlug !== '') {
+                        try {
+                            $slugRow = Database::pdo()->prepare('SELECT slug FROM special_offers WHERE id = :id LIMIT 1');
+                            $slugRow->execute(['id' => $logOfferSlug]);
+                            $logOfferSlug = trim((string) ($slugRow->fetchColumn() ?: ''));
+                        } catch (\Throwable) {
+                            $logOfferSlug = '';
+                        }
+                        if ($logOfferSlug !== '') {
+                            break;
+                        }
+                    }
+                }
+            }
             VisitorLogService::recordOrderPlaced(
                 $visitorSessionId,
                 $orderId,
@@ -394,7 +429,8 @@ final class OrderService
                 $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
                 $guestNameAr,
                 $guestPhone,
-                $customerPayload
+                $customerPayload,
+                $logOfferSlug !== '' ? $logOfferSlug : null
             );
         }
 

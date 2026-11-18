@@ -37,6 +37,13 @@ final class Bootstrap
         }
         date_default_timezone_set('Asia/Damascus');
 
+        if (!self::shouldSkipWebRuntime()) {
+            try {
+                \Portal\Services\SpecialOfferService::publishDueScheduledOfferNotifications();
+            } catch (\Throwable) {
+            }
+        }
+
         if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
             $lifetimeSeconds = self::configureSessionCookie();
             $sessionName = Config::get('PORTAL_SESSION_NAME', 'portal_session');

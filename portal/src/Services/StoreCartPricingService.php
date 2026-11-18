@@ -199,14 +199,18 @@ final class StoreCartPricingService
                 'original_unit_sale_price_usd' => $current['original_unit_sale_price_usd'] ?? null,
                 'original_sale_price_sp' => $current['original_sale_price_sp'] ?? null,
                 'original_sale_price_usd' => $current['original_sale_price_usd'] ?? null,
-                'has_offer' => $current['has_offer'] ?? false,
-                'offer_badge' => $current['offer_badge'] ?? null,
-                'offer_title_ar' => $current['offer_title_ar'] ?? null,
-                'special_offer_id' => $current['special_offer_id'] ?? null,
                 'customer_show_price' => $line['customer_show_price'] ?? null,
                 'added_store_section' => $line['added_store_section'] ?? null,
                 'added_store_offer' => $line['added_store_offer'] ?? null,
             ]));
+
+            $storeOfferSlug = isset($_SESSION['store_cart_context']['offer'])
+                ? trim((string) $_SESSION['store_cart_context']['offer'])
+                : null;
+            $merged = ShareCartService::attributeOfferOnLine(
+                $merged,
+                $storeOfferSlug !== '' ? $storeOfferSlug : null
+            );
 
             if ($change !== null) {
                 $changes[] = $change;

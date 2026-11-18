@@ -542,7 +542,10 @@ final class StoreCartApi
         }
 
         $notes = trim((string) ($input['notes_ar'] ?? ''));
-        $cartItems = array_values(ShareCartService::items($token));
+        $cartItems = array_values(array_map(
+            static fn (array $line): array => ShareCartService::attributeOfferOnLine($line),
+            ShareCartService::items($token)
+        ));
         if ($guestName === '' || (function_exists('text_length') ? text_length($guestName) : strlen($guestName)) < 2) {
             return self::sharePayload($token, 'يرجى إدخال اسم صحيح (حرفان على الأقل).', false, 'error');
         }

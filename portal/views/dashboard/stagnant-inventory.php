@@ -11,6 +11,8 @@ use Portal\Support\PriceFx;
 /** @var string $seasonId */
 /** @var int $minAgeDays */
 /** @var int|null $maxAgeDays */
+/** @var int|null $minDaysSinceLastSale */
+/** @var int|null $maxDaysSinceLastSale */
 /** @var string $sort */
 /** @var int $page */
 /** @var int $pageSize */
@@ -39,6 +41,8 @@ $selectedTypeSet = array_fill_keys($selectedMaterialTypes, true);
 $selectedGroupSet = array_fill_keys($selectedGroupGuids, true);
 $keyword = (string) ($keyword ?? '');
 $maxAgeDays = $maxAgeDays ?? null;
+$minDaysSinceLastSale = $minDaysSinceLastSale ?? null;
+$maxDaysSinceLastSale = $maxDaysSinceLastSale ?? null;
 $hasExtraFilters = $selectedStoreGuids !== [] || $selectedCompanies !== [] || $selectedMaterialTypes !== [] || $selectedGroupGuids !== [];
 
 $fmtMoney = static function (?float $value, int $decimals = 2): string {
@@ -96,6 +100,8 @@ foreach (($materialFilterOptions['groups'] ?? []) as $group) {
 $queryBase = [
     'minAgeDays' => $minAgeDays,
     'maxAgeDays' => $maxAgeDays,
+    'minDaysSinceLastSale' => $minDaysSinceLastSale,
+    'maxDaysSinceLastSale' => $maxDaysSinceLastSale,
     'sort' => $sort,
     'pageSize' => $pageSize,
     'seasonId' => $seasonId !== '' ? $seasonId : 'all',
@@ -171,14 +177,24 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       <input type="number" name="maxAgeDays" min="1" max="3650" value="<?= $maxAgeDays !== null ? (int) $maxAgeDays : '' ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
     </label>
     <label class="text-sm">
+      <span class="text-text-muted">منذ آخر بيع (يوم) من</span>
+      <input type="number" name="minDaysSinceLastSale" min="0" max="3650" value="<?= $minDaysSinceLastSale !== null ? (int) $minDaysSinceLastSale : '' ?>" placeholder="اختياري" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="text-sm">
+      <span class="text-text-muted">منذ آخر بيع إلى</span>
+      <input type="number" name="maxDaysSinceLastSale" min="0" max="3650" value="<?= $maxDaysSinceLastSale !== null ? (int) $maxDaysSinceLastSale : '' ?>" placeholder="اختياري" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="text-sm">
       <span class="text-text-muted">حتى تاريخ</span>
       <input type="date" name="asOf" value="<?= h($asOf) ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
     </label>
     <label class="text-sm">
       <span class="text-text-muted">الترتيب</span>
       <select name="sort" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
-        <option value="age:desc" <?= $sort === 'age:desc' ? 'selected' : '' ?>>الأقدم أولاً</option>
-        <option value="age:asc" <?= $sort === 'age:asc' ? 'selected' : '' ?>>الأحدث أولاً</option>
+        <option value="age:desc" <?= $sort === 'age:desc' ? 'selected' : '' ?>>عمر المخزون: الأقدم</option>
+        <option value="age:asc" <?= $sort === 'age:asc' ? 'selected' : '' ?>>عمر المخزون: الأحدث</option>
+        <option value="lastSale:desc" <?= $sort === 'lastSale:desc' ? 'selected' : '' ?>>آخر بيع: الأقدم</option>
+        <option value="lastSale:asc" <?= $sort === 'lastSale:asc' ? 'selected' : '' ?>>آخر بيع: الأحدث</option>
         <option value="qty:desc" <?= $sort === 'qty:desc' ? 'selected' : '' ?>>الكمية ↓</option>
         <option value="qty:asc" <?= $sort === 'qty:asc' ? 'selected' : '' ?>>الكمية ↑</option>
         <option value="name:asc" <?= $sort === 'name:asc' ? 'selected' : '' ?>>الاسم ↑</option>
@@ -338,7 +354,9 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
             <th class="px-2 py-2.5 w-20 text-start">صورة</th>
             <th class="px-2 py-2.5 text-start min-w-[200px]">المادة</th>
             <th class="px-2 py-2.5 text-start w-20">كمية</th>
-            <th class="px-2 py-2.5 text-start w-20">عمر</th>
+            <th class="px-2 py-2.5 text-start w-20">عمر مخزون</th>
+            <th class="px-2 py-2.5 text-start w-24">آخر بيع</th>
+            <th class="px-2 py-2.5 text-start w-20">منذ البيع</th>
             <th class="px-2 py-2.5 text-start w-24">مبيع $</th>
             <th class="px-2 py-2.5 text-start w-24">مبيع ل.س</th>
             <th class="px-2 py-2.5 text-start w-20">شراء $</th>
@@ -364,6 +382,9 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
               $qty = (float) ($item['stagnantRemainingQty'] ?? 0);
               $ageRaw = $item['maxAgeDays'] ?? null;
               $ageLabel = $ageRaw === null || $ageRaw === '' ? '—' : number_format((float) $ageRaw, 0);
+              $lastSaleDate = trim((string) ($item['lastSaleDate'] ?? ''));
+              $daysSinceSale = $item['daysSinceLastSale'] ?? null;
+              $daysSinceSaleLabel = $daysSinceSale === null ? 'لم يُبَع' : number_format((int) $daysSinceSale, 0) . ' يوم';
               $saleUsd = isset($item['unitSalePriceUsd']) ? (float) $item['unitSalePriceUsd'] : null;
               $saleSyp = isset($item['unitSalePriceSyp']) ? (float) $item['unitSalePriceSyp'] : null;
               $purchase = isset($item['unitPurchasePriceUsd']) ? (float) $item['unitPurchasePriceUsd'] : null;
@@ -438,6 +459,8 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
               </td>
               <td class="px-2 py-2 font-bold tabular-nums"><?= h(number_format($qty, 0)) ?></td>
               <td class="px-2 py-2 font-extrabold tabular-nums text-amber-700"><?= h($ageLabel) ?></td>
+              <td class="px-2 py-2 tabular-nums text-slate-700"><?= $lastSaleDate !== '' ? h($fmtDate($lastSaleDate)) : '—' ?></td>
+              <td class="px-2 py-2 tabular-nums font-semibold text-slate-800"><?= h($daysSinceSaleLabel) ?></td>
               <td class="px-2 py-2 tabular-nums font-bold text-slate-900" dir="ltr"><?= h($fmtMoney($saleUsd)) ?></td>
               <td class="px-2 py-2 tabular-nums text-slate-700" dir="ltr"><?= h($fmtMoney($saleSyp, 0)) ?></td>
               <td class="px-2 py-2 tabular-nums text-slate-600" dir="ltr"><?= h($fmtMoney($purchase)) ?></td>

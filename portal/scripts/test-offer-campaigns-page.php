@@ -47,5 +47,30 @@ $assert('analytics merges inferred sales', str_contains($analyticsSrc, 'mergeInf
 $assert('analytics lists recent orders', str_contains($analyticsSrc, 'recentOrdersForOffer'));
 $orderSrc = (string) file_get_contents($root . '/src/Services/OrderService.php');
 $assert('orders enrich cart lines before save', str_contains($orderSrc, 'enrichLineWithOffer'));
+$assert('orders re-enrich after stock recheck', str_contains($orderSrc, 'recheckAvailable'));
+$assert('analytics backfills missing offer ids', str_contains($analyticsSrc, 'backfillRecentOrderAttribution'));
+$assert('analytics infers sales from visitor session', str_contains($analyticsSrc, 'mergeSessionInferredSummaries'));
+$visitorLog = (string) file_get_contents($root . '/src/Services/VisitorLogService.php');
+$assert('visitor log offer slug uses session_id column', str_contains($visitorLog, 'WHERE session_id = :session_id'));
+$offerSvc = (string) file_get_contents($root . '/src/Services/SpecialOfferService.php');
+$assert('scheduled offer notifications deferred', str_contains($offerSvc, 'publishDueScheduledOfferNotifications'));
+$assert('order repair script exists', is_file($root . '/scripts/repair-offer-order.php'));
+$assert('bulk backfill script exists', is_file($root . '/scripts/backfill-offer-attribution.php'));
+$assert('session lookup for order_placed logs', str_contains($visitorLog, 'sessionIdForOrder'));
+$assert('bulk session backfill from order_placed', str_contains($visitorLog, 'backfillOrdersVisitorSessionFromLogs'));
+$assert('order_placed offer evidence sql', str_contains($analyticsSrc, 'orderPlacedOfferLogSql'));
+$shareCart = (string) file_get_contents($root . '/src/Services/ShareCartService.php');
+$assert('cart lines attribute offer from session slug', str_contains($shareCart, 'attributeOfferOnLine'));
+$assert('historical offer resolution exists', str_contains((string) file_get_contents($root . '/src/Services/SpecialOfferService.php'), 'resolveOfferIdForOrderLine'));
+$stagnantSrc = (string) file_get_contents($root . '/src/Services/StagnantInventoryService.php');
+$assert('stagnant merges last sale stats', str_contains($stagnantSrc, 'attachLastSaleStats'));
+$assert('stagnant loads erp last sales', str_contains($stagnantSrc, 'mergeLastSaleTimestampsFromErp'));
+$assert('api last-sales endpoint exists', str_contains(
+    (string) file_get_contents($root . '/../src/ExistingDb.Api/Controllers/MaterialAgesController.cs'),
+    'last-sales'
+));
+$previewJs = (string) file_get_contents($root . '/public/assets/store-product-preview.js');
+$assert('offer preview qty visibility helper', str_contains($previewJs, 'applyOfferQtyVisibility'));
+$assert('offer preview remove button', str_contains($previewJs, 'so-offer-preview-edit__remove'));
 
 echo "All offer campaigns checks passed.\n";

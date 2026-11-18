@@ -268,7 +268,8 @@ final class VisitorLogService
         ?string $webCustomerId,
         string $guestNameAr,
         string $guestPhone,
-        ?array $customer = null
+        ?array $customer = null,
+        ?string $offerSlug = null
     ): void {
         if (!self::hasSchema() || trim($sessionId) === '' || trim($orderId) === '') {
             return;
@@ -280,6 +281,18 @@ final class VisitorLogService
             ? ('طلب جديد: ' . $guestNameAr . ($orderNumber !== '' ? ' (' . $orderNumber . ')' : ''))
             : ('طلب جديد' . ($orderNumber !== '' ? ': ' . $orderNumber : ''));
 
+        $meta = [
+            'order_id' => $orderId,
+            'order_number' => $orderNumber,
+            'guest_name' => $guestNameAr,
+            'guest_phone' => $guestPhone,
+            'label_ar' => $label,
+        ];
+        $offerSlug = trim((string) ($offerSlug ?? ''));
+        if ($offerSlug !== '') {
+            $meta['offer_slug'] = $offerSlug;
+        }
+
         self::recordEvent(
             $sessionId,
             'order_placed',
@@ -287,13 +300,7 @@ final class VisitorLogService
             'إرسال طلب',
             '',
             $customer,
-            [
-                'order_id' => $orderId,
-                'order_number' => $orderNumber,
-                'guest_name' => $guestNameAr,
-                'guest_phone' => $guestPhone,
-                'label_ar' => $label,
-            ]
+            $meta
         );
     }
 
@@ -2862,5 +2869,200 @@ final class VisitorLogService
             FILTER_VALIDATE_IP,
             FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
         ) === false;
+    }
+
+    /** Fill orders.visitor_session_id from order_placed visitor logs (bulk). */
+    public static function backfillOrdersVisitorSessionFromLogs(int $days = 365): int
+    {
+        if (!self::ordersHaveVisitorSessionColumn()) {
+            return 0;
+        }
+        $days = max(1, min(3650, $days));
+        try {
+            $stmt = Database::pdo()->prepare(
+                'UPDATE orders o
+                 SET visitor_session_id = src.session_id
+                 FROM (
+                    SELECT DISTINCT ON (o2.id)
+                           o2.id AS order_id,
+                           vl.session_id
+                    FROM orders o2
+                    INNER JOIN visitor_logs vl ON vl.action = \'order_placed\'
+                       AND btrim(vl.session_id) <> \'\'
+                       AND (
+                         (vl.details_ar LIKE \'{%\' AND (
+                           vl.details_ar::jsonb->>\'order_id\' = o2.id::text
+                           OR vl.details_ar::jsonb->>\'order_number\' = o2.order_number
+                         ))
+                         OR vl.details_ar ILIKE \'%\' || o2.order_number || \'%\'
+                       )
+                    WHERE o2.created_at >= NOW() - make_interval(days => :days)
+                      AND (o2.visitor_session_id IS NULL OR btrim(o2.visitor_session_id) = \'\')
+                    ORDER BY o2.id, vl.created_at DESC
+                 ) src
+                 WHERE o.id = src.order_id
+                   AND (o.visitor_session_id IS NULL OR btrim(o.visitor_session_id) = \'\')'
+            );
+            $stmt->execute(['days' => $days]);
+
+            return $stmt->rowCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /** Visitor session id captured when the order was placed (if orders row missed it). */
+    public static function sessionIdForOrder(string $orderId, string $orderNumber): ?string
+    {
+        $orderId = trim($orderId);
+        $orderNumber = trim($orderNumber);
+        if ($orderId === '' && $orderNumber === '') {
+            return null;
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT session_id
+                 FROM visitor_logs
+                 WHERE action = \'order_placed\'
+                   AND (
+                     (details_ar LIKE \'{%\' AND (
+                       details_ar::jsonb->>\'order_id\' = :order_id
+                       OR details_ar::jsonb->>\'order_number\' = :order_number
+                     ))
+                     OR details_ar ILIKE :num_like
+                   )
+                 ORDER BY created_at DESC
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                'order_id' => $orderId,
+                'order_number' => $orderNumber,
+                'num_like' => '%' . str_replace(['%', '_'], ['\\%', '\\_'], $orderNumber) . '%',
+            ]);
+            $session = trim((string) ($stmt->fetchColumn() ?: ''));
+
+            return $session !== '' ? $session : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Offer slug from order_placed or same-session events near order time.
+     */
+    public static function offerSlugForOrder(string $orderId, string $orderNumber, ?string $sessionId, ?string $beforeAt = null): ?string
+    {
+        $orderId = trim($orderId);
+        $orderNumber = trim($orderNumber);
+        $sessionId = trim((string) ($sessionId ?? ''));
+
+        try {
+            if ($orderId !== '' || $orderNumber !== '') {
+                $stmt = Database::pdo()->prepare(
+                    'SELECT details_ar
+                     FROM visitor_logs
+                     WHERE action = \'order_placed\'
+                       AND (
+                         (details_ar LIKE \'{%\' AND (
+                           details_ar::jsonb->>\'order_id\' = :order_id
+                           OR details_ar::jsonb->>\'order_number\' = :order_number
+                         ))
+                         OR details_ar ILIKE :num_like
+                       )
+                     ORDER BY created_at DESC
+                     LIMIT 1'
+                );
+                $stmt->execute([
+                    'order_id' => $orderId,
+                    'order_number' => $orderNumber,
+                    'num_like' => '%' . str_replace(['%', '_'], ['\\%', '\\_'], $orderNumber) . '%',
+                ]);
+                $slug = self::offerSlugFromLogDetails((string) ($stmt->fetchColumn() ?: ''));
+                if ($slug !== '') {
+                    return $slug;
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        if ($sessionId === '') {
+            $sessionId = self::sessionIdForOrder($orderId, $orderNumber) ?? '';
+        }
+        if ($sessionId === '') {
+            return null;
+        }
+
+        return self::dominantOfferSlugForSession($sessionId, $beforeAt);
+    }
+
+    /** Dominant offer slug from this session before a given time (add-to-cart / offer page views). */
+    public static function dominantOfferSlugForSession(string $sessionId, ?string $beforeAt = null): ?string
+    {
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            return null;
+        }
+
+        $params = ['session_id' => $sessionId];
+        $beforeSql = '';
+        if ($beforeAt !== null && trim($beforeAt) !== '') {
+            $beforeSql = ' AND created_at <= :before_at';
+            $params['before_at'] = trim($beforeAt);
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT details_ar
+                 FROM visitor_logs
+                 WHERE session_id = :session_id
+                   AND action IN (\'add_to_cart\', \'page_view\', \'product_view\', \'order_placed\')
+                   ' . $beforeSql . '
+                 ORDER BY created_at DESC
+                 LIMIT 60'
+            );
+            $stmt->execute($params);
+            $counts = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $slug = self::offerSlugFromLogDetails((string) ($row['details_ar'] ?? ''));
+                if ($slug === '') {
+                    continue;
+                }
+                $counts[$slug] = ($counts[$slug] ?? 0) + 1;
+            }
+            if ($counts === []) {
+                return null;
+            }
+            arsort($counts);
+
+            return (string) array_key_first($counts);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function offerSlugFromLogDetails(string $details): string
+    {
+        $details = trim($details);
+        if ($details === '') {
+            return '';
+        }
+        if (str_starts_with($details, '{')) {
+            try {
+                $json = json_decode($details, true, 512, JSON_THROW_ON_ERROR);
+                if (is_array($json)) {
+                    $slug = trim((string) ($json['offer_slug'] ?? ''));
+                    if ($slug !== '') {
+                        return $slug;
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+        if (preg_match('/"offer_slug"\s*:\s*"([^"\\\\]+)"/u', $details, $m)) {
+            return trim((string) ($m[1] ?? ''));
+        }
+
+        return '';
     }
 }

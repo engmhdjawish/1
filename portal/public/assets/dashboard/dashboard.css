@@ -2502,6 +2502,16 @@ button.is-loading[data-loading-label],
   gap: 0.35rem;
 }
 
+.so-offer-preview-edit__actions {
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+}
+
+.so-offer-preview-edit__remove {
+  width: 100%;
+}
+
 .so-invoice__material-text {
   display: flex;
   flex-direction: column;
